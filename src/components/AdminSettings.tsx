@@ -86,15 +86,57 @@ const GeneralSettings: React.FC<{ notify: (type: string, msg: string) => void; o
   const [season, setSeason] = useState(league.season);
   const [desc, setDesc] = useState(league.description);
   const [status, setStatus] = useState(league.status);
+  const [logoUrl, setLogoUrl] = useState(league.logo_url);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        notify('error', 'Ukuran file maksimal 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setLogoUrl(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = () => {
-    store.saveLeague({ ...league, name, season, description: desc, status });
+    store.saveLeague({ ...league, name, season, description: desc, status, logo_url: logoUrl });
     notify('success', 'Pengaturan umum disimpan');
     onRefresh();
   };
 
   return (
     <div style={{ background: C.surface, borderRadius: 10, padding: 16, border: `1px solid ${C.border}` }}>
+      {/* Logo Upload */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: C.textSecondary, marginBottom: 4 }}>Logo Liga</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo Liga" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${C.primary}` }} />
+          ) : (
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 28 }}>
+              S
+            </div>
+          )}
+          <div style={{ flex: 1 }}>
+            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onChange={handleLogoSelect} style={{ display: 'none' }} />
+            <button onClick={() => fileInputRef.current?.click()} style={{ padding: '6px 12px', background: C.bg, color: C.textPrimary, borderRadius: 6, fontSize: 11, border: `1px solid ${C.border}`, cursor: 'pointer', marginBottom: 4 }}>
+              {logoUrl ? 'Ganti Logo' : 'Pilih Logo'}
+            </button>
+            {logoUrl && (
+              <button onClick={() => setLogoUrl('')} style={{ display: 'block', padding: '6px 12px', background: `${C.error}15`, color: C.error, borderRadius: 6, fontSize: 11, border: 'none', cursor: 'pointer' }}>
+                Hapus Logo
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: C.textSecondary, marginBottom: 4 }}>Nama Liga</label>
         <input value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }} />

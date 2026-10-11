@@ -22,19 +22,34 @@ const C = {
 };
 
 // Logo Component
-const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
+const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; logoUrl?: string }> = ({ size = 'md', logoUrl }) => {
   const s = size === 'lg' ? 56 : size === 'md' ? 36 : 28;
   const fs = size === 'lg' ? 20 : size === 'md' ? 13 : 10;
+  
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{ position: 'relative', width: s, height: s }}>
-        <div style={{
-          width: s, height: s, borderRadius: '50%',
-          background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ color: '#fff', fontWeight: 700, fontFamily: 'Montserrat, sans-serif', fontSize: fs }}>S</span>
-        </div>
+        {logoUrl ? (
+          <img 
+            src={logoUrl} 
+            alt="SOQ.COMM PADEL LEAGUE" 
+            style={{ 
+              width: s, 
+              height: s, 
+              borderRadius: '50%', 
+              objectFit: 'cover',
+              border: `2px solid ${C.primary}`,
+            }} 
+          />
+        ) : (
+          <div style={{
+            width: s, height: s, borderRadius: '50%',
+            background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ color: '#fff', fontWeight: 700, fontFamily: 'Montserrat, sans-serif', fontSize: fs }}>S</span>
+          </div>
+        )}
         <div style={{
           position: 'absolute', bottom: -2, right: -2,
           width: s * 0.3, height: s * 0.3, borderRadius: '50%',
@@ -49,173 +64,205 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
   );
 };
 
-// Download Klasemen PNG
+// Download Klasemen PNG - Simple & Reliable Version
 const downloadStandingsPNG = async (standings: Standing[], teams: Team[], league: any): Promise<void> => {
-  return new Promise((resolve, reject) => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  if (!ctx) {
+    throw new Error('Browser tidak mendukung Canvas API');
+  }
+
+  const width = 1920;
+  const rowHeight = 60;
+  const headerHeight = 200;
+  const height = headerHeight + (standings.length * rowHeight) + 100;
+  
+  canvas.width = width;
+  canvas.height = height;
+
+  // Background
+  ctx.fillStyle = '#F5FBFC';
+  ctx.fillRect(0, 0, width, height);
+
+  // Header gradient
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, '#087E91');
+  gradient.addColorStop(1, '#16B9C0');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, headerHeight);
+
+  // Logo
+  if (league.logo_url) {
     try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: false });
-      
-      if (!ctx) {
-        reject(new Error('Browser tidak mendukung Canvas API'));
-        return;
-      }
-
-      const width = 1920;
-      const rowHeight = 60;
-      const headerHeight = 200;
-      const height = headerHeight + (standings.length * rowHeight) + 100;
-      
-      canvas.width = width;
-      canvas.height = height;
-
-      // Background
-      ctx.fillStyle = '#F5FBFC';
-      ctx.fillRect(0, 0, width, height);
-
-      // Header gradient
-      const gradient = ctx.createLinearGradient(0, 0, width, 0);
-      gradient.addColorStop(0, '#087E91');
-      gradient.addColorStop(1, '#16B9C0');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, headerHeight);
-
-      // Logo circle
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        logoImg.onload = resolve;
+        logoImg.onerror = reject;
+        logoImg.src = league.logo_url;
+      });
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(100, 100, 50, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(logoImg, 50, 50, 100, 100);
+      ctx.restore();
+    } catch (e) {
+      // Fallback to default logo
       ctx.beginPath();
       ctx.arc(100, 100, 50, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.fill();
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 40px Arial, sans-serif';
+      ctx.font = 'bold 40px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('S', 100, 100);
+    }
+  } else {
+    ctx.beginPath();
+    ctx.arc(100, 100, 50, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 40px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('S', 100, 100);
+  }
 
-      // Title
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 32px Arial, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('KLASEMEN LIGA PADEL', 180, 80);
-      ctx.font = '16px Arial, sans-serif';
-      ctx.fillText(`${league.name} • Season ${league.season}`, 180, 110);
-      ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 180, 135);
+  // Title
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 32px Arial';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('KLASEMEN LIGA PADEL', 180, 80);
+  ctx.font = '16px Arial';
+  ctx.fillText(`${league.name} • Season ${league.season}`, 180, 110);
+  ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 180, 135);
 
-      // Table header
-      const tableTop = headerHeight + 20;
-      ctx.fillStyle = '#087E91';
-      ctx.fillRect(40, tableTop, width - 80, 50);
-      
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 14px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const cols = ['Pos', 'Nama Tim', 'Main', 'Total Poin', 'Pasangan Menang', 'Pasangan Kalah', 'Selisih'];
-      const colWidths = [80, 400, 100, 150, 180, 180, 150];
-      let x = 40;
-      cols.forEach((col, i) => {
-        ctx.fillText(col, x + colWidths[i] / 2, tableTop + 25);
-        x += colWidths[i];
-      });
+  // Table header
+  const tableTop = headerHeight + 20;
+  ctx.fillStyle = '#087E91';
+  ctx.fillRect(40, tableTop, width - 80, 50);
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const cols = ['Pos', 'Nama Tim', 'Main', 'Total Poin', 'Pasangan Menang', 'Pasangan Kalah', 'Selisih'];
+  const colWidths = [80, 400, 100, 150, 180, 180, 150];
+  let x = 40;
+  cols.forEach((col, i) => {
+    ctx.fillText(col, x + colWidths[i] / 2, tableTop + 25);
+    x += colWidths[i];
+  });
 
-      // Table rows
-      ctx.textBaseline = 'middle';
-      standings.forEach((s, idx) => {
-        const team = teams.find(t => t.id === s.team_id);
-        const y = tableTop + 50 + (idx * rowHeight);
-        
-        // Row background
-        if (idx === 0) {
-          ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
-          ctx.fillRect(40, y, width - 80, rowHeight);
-        } else if (idx % 2 === 0) {
-          ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
-          ctx.fillRect(40, y, width - 80, rowHeight);
-        }
+  // Table rows
+  standings.forEach((s, idx) => {
+    const team = teams.find(t => t.id === s.team_id);
+    const y = tableTop + 50 + (idx * rowHeight);
+    
+    // Row background
+    if (idx === 0) {
+      ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
+      ctx.fillRect(40, y, width - 80, rowHeight);
+    } else if (idx % 2 === 0) {
+      ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
+      ctx.fillRect(40, y, width - 80, rowHeight);
+    }
 
-        // Position badge
+    // Position badge
+    ctx.beginPath();
+    ctx.arc(80, y + rowHeight / 2, 18, 0, Math.PI * 2);
+    ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
+    ctx.fill();
+    ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(idx + 1), 80, y + rowHeight / 2);
+
+    // Team logo or placeholder
+    if (team?.logo_url) {
+      try {
+        const teamImg = new Image();
+        teamImg.crossOrigin = 'anonymous';
+        teamImg.src = team.logo_url;
+        ctx.save();
         ctx.beginPath();
-        ctx.arc(80, y + rowHeight / 2, 18, 0, Math.PI * 2);
-        ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
-        ctx.fill();
-        ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
-        ctx.font = 'bold 14px Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(String(idx + 1), 80, y + rowHeight / 2);
-
-        // Team logo placeholder
+        ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(teamImg, 130, y + rowHeight / 2 - 20, 40, 40);
+        ctx.restore();
+      } catch (e) {
         ctx.beginPath();
         ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
         ctx.fillStyle = '#16B9C0';
         ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 16px Arial, sans-serif';
-        ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
-
-        // Team name
-        ctx.fillStyle = '#173D4A';
-        ctx.font = '500 14px Arial, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(team?.name || 'Unknown', 190, y + rowHeight / 2);
-
-        // Stats
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
-        ctx.font = '14px Arial, sans-serif';
-        ctx.fillStyle = '#173D4A';
-        x = 40 + colWidths[0] + colWidths[1];
-        ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
-        x += colWidths[2];
-        ctx.font = 'bold 14px Arial, sans-serif';
-        ctx.fillStyle = '#087E91';
-        ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
-        x += colWidths[3];
-        ctx.font = '14px Arial, sans-serif';
-        ctx.fillStyle = '#2EAD72';
-        ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
-        x += colWidths[4];
-        ctx.fillStyle = '#E65C5C';
-        ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
-        x += colWidths[5];
-        ctx.fillStyle = '#173D4A';
-        ctx.fillText(String(s.pair_difference), x + colWidths[6] / 2, y + rowHeight / 2);
-      });
-
-      // Footer
-      const footerY = tableTop + 50 + (standings.length * rowHeight) + 30;
-      ctx.fillStyle = '#718792';
-      ctx.font = '12px Arial, sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
+      ctx.fillStyle = '#16B9C0';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px Arial';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
-      ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
-
-      // Convert to blob and download
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error('Gagal membuat gambar'));
-          return;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        
-        // Cleanup
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          resolve();
-        }, 100);
-      }, 'image/png', 1.0);
-
-    } catch (error) {
-      reject(error);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
     }
+
+    // Team name
+    ctx.fillStyle = '#173D4A';
+    ctx.font = '500 14px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(team?.name || 'Unknown', 190, y + rowHeight / 2);
+
+    // Stats
+    ctx.textAlign = 'center';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#173D4A';
+    x = 40 + colWidths[0] + colWidths[1];
+    ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
+    x += colWidths[2];
+    ctx.font = 'bold 14px Arial';
+    ctx.fillStyle = '#087E91';
+    ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
+    x += colWidths[3];
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#2EAD72';
+    ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
+    x += colWidths[4];
+    ctx.fillStyle = '#E65C5C';
+    ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
+    x += colWidths[5];
+    ctx.fillStyle = '#173D4A';
+    ctx.fillText(String(s.pair_difference), x + colWidths[6] / 2, y + rowHeight / 2);
   });
+
+  // Footer
+  const footerY = tableTop + 50 + (standings.length * rowHeight) + 30;
+  ctx.fillStyle = '#718792';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
+  ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
+
+  // Simple download using toDataURL
+  const dataURL = canvas.toDataURL('image/png');
+  const link = document.createElement('a');
+  link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
+  link.href = dataURL;
+  link.click();
 };
 
 // App Component
@@ -289,7 +336,7 @@ function App() {
       }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button onClick={() => handleNavigate('home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            <Logo size="sm" />
+            <Logo size="sm" logoUrl={league.logo_url} />
           </button>
           <nav style={{ display: 'flex', gap: 4 }} className="desktop-nav">
             {navItems.slice(0, 5).map(item => (
@@ -1186,6 +1233,7 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const league = store.getLeague();
   const [notification, setNotification] = useState<{ type: string; msg: string } | null>(null);
   const [page, setPage] = useState('dashboard');
 
@@ -1219,7 +1267,7 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         <div style={{ width: '100%', maxWidth: 360 }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}><Logo size="lg" /></div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}><Logo size="lg" logoUrl={league.logo_url} /></div>
             <h1 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 4px', fontFamily: 'Montserrat, sans-serif' }}>Admin Login</h1>
             <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>Masuk untuk mengelola liga</p>
           </div>
@@ -1262,7 +1310,7 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
       )}
       <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Logo size="sm" />
+          <Logo size="sm" logoUrl={league.logo_url} />
           <span style={{ fontSize: 10, padding: '2px 8px', background: `${C.primary}15`, color: C.primaryDark, borderRadius: 10, fontWeight: 600 }}>Admin</span>
           {currentUser && <span style={{ fontSize: 11, color: C.textSecondary }}>• {currentUser.name} ({currentUser.role})</span>}
         </div>
