@@ -50,144 +50,172 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
 };
 
 // Download Klasemen PNG
-const downloadStandingsPNG = (standings: Standing[], teams: Team[], league: any) => {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+const downloadStandingsPNG = async (standings: Standing[], teams: Team[], league: any): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: false });
+      
+      if (!ctx) {
+        reject(new Error('Browser tidak mendukung Canvas API'));
+        return;
+      }
 
-  const width = 1920;
-  const rowHeight = 60;
-  const headerHeight = 200;
-  const height = headerHeight + (standings.length * rowHeight) + 100;
-  canvas.width = width;
-  canvas.height = height;
+      const width = 1920;
+      const rowHeight = 60;
+      const headerHeight = 200;
+      const height = headerHeight + (standings.length * rowHeight) + 100;
+      
+      canvas.width = width;
+      canvas.height = height;
 
-  // Background
-  ctx.fillStyle = '#F5FBFC';
-  ctx.fillRect(0, 0, width, height);
+      // Background
+      ctx.fillStyle = '#F5FBFC';
+      ctx.fillRect(0, 0, width, height);
 
-  // Header gradient
-  const gradient = ctx.createLinearGradient(0, 0, width, 0);
-  gradient.addColorStop(0, '#087E91');
-  gradient.addColorStop(1, '#16B9C0');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, headerHeight);
+      // Header gradient
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      gradient.addColorStop(0, '#087E91');
+      gradient.addColorStop(1, '#16B9C0');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, headerHeight);
 
-  // Logo circle
-  ctx.beginPath();
-  ctx.arc(100, 100, 50, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 40px Montserrat';
-  ctx.textAlign = 'center';
-  ctx.fillText('S', 100, 115);
+      // Logo circle
+      ctx.beginPath();
+      ctx.arc(100, 100, 50, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 40px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', 100, 100);
 
-  // Title
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 32px Montserrat';
-  ctx.textAlign = 'left';
-  ctx.fillText('KLASEMEN LIGA PADEL', 180, 80);
-  ctx.font = '16px Inter';
-  ctx.fillText(`${league.name} • Season ${league.season}`, 180, 110);
-  ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 180, 135);
+      // Title
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 32px Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('KLASEMEN LIGA PADEL', 180, 80);
+      ctx.font = '16px Arial, sans-serif';
+      ctx.fillText(`${league.name} • Season ${league.season}`, 180, 110);
+      ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 180, 135);
 
-  // Table header
-  const tableTop = headerHeight + 20;
-  ctx.fillStyle = '#087E91';
-  ctx.fillRect(40, tableTop, width - 80, 50);
-  
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px Inter';
-  ctx.textAlign = 'center';
-  const cols = ['Pos', 'Nama Tim', 'Main', 'Total Poin', 'Pasangan Menang', 'Pasangan Kalah', 'Selisih'];
-  const colWidths = [80, 400, 100, 150, 180, 180, 150];
-  let x = 40;
-  cols.forEach((col, i) => {
-    ctx.fillText(col, x + colWidths[i] / 2, tableTop + 30);
-    x += colWidths[i];
-  });
+      // Table header
+      const tableTop = headerHeight + 20;
+      ctx.fillStyle = '#087E91';
+      ctx.fillRect(40, tableTop, width - 80, 50);
+      
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const cols = ['Pos', 'Nama Tim', 'Main', 'Total Poin', 'Pasangan Menang', 'Pasangan Kalah', 'Selisih'];
+      const colWidths = [80, 400, 100, 150, 180, 180, 150];
+      let x = 40;
+      cols.forEach((col, i) => {
+        ctx.fillText(col, x + colWidths[i] / 2, tableTop + 25);
+        x += colWidths[i];
+      });
 
-  // Table rows
-  standings.forEach((s, idx) => {
-    const team = teams.find(t => t.id === s.team_id);
-    const y = tableTop + 50 + (idx * rowHeight);
-    
-    // Row background
-    if (idx === 0) {
-      ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
-      ctx.fillRect(40, y, width - 80, rowHeight);
-    } else if (idx % 2 === 0) {
-      ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
-      ctx.fillRect(40, y, width - 80, rowHeight);
+      // Table rows
+      ctx.textBaseline = 'middle';
+      standings.forEach((s, idx) => {
+        const team = teams.find(t => t.id === s.team_id);
+        const y = tableTop + 50 + (idx * rowHeight);
+        
+        // Row background
+        if (idx === 0) {
+          ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
+          ctx.fillRect(40, y, width - 80, rowHeight);
+        } else if (idx % 2 === 0) {
+          ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
+          ctx.fillRect(40, y, width - 80, rowHeight);
+        }
+
+        // Position badge
+        ctx.beginPath();
+        ctx.arc(80, y + rowHeight / 2, 18, 0, Math.PI * 2);
+        ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
+        ctx.fill();
+        ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
+        ctx.font = 'bold 14px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(idx + 1), 80, y + rowHeight / 2);
+
+        // Team logo placeholder
+        ctx.beginPath();
+        ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
+        ctx.fillStyle = '#16B9C0';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px Arial, sans-serif';
+        ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
+
+        // Team name
+        ctx.fillStyle = '#173D4A';
+        ctx.font = '500 14px Arial, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(team?.name || 'Unknown', 190, y + rowHeight / 2);
+
+        // Stats
+        ctx.textAlign = 'center';
+        ctx.font = '14px Arial, sans-serif';
+        ctx.fillStyle = '#173D4A';
+        x = 40 + colWidths[0] + colWidths[1];
+        ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
+        x += colWidths[2];
+        ctx.font = 'bold 14px Arial, sans-serif';
+        ctx.fillStyle = '#087E91';
+        ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
+        x += colWidths[3];
+        ctx.font = '14px Arial, sans-serif';
+        ctx.fillStyle = '#2EAD72';
+        ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
+        x += colWidths[4];
+        ctx.fillStyle = '#E65C5C';
+        ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
+        x += colWidths[5];
+        ctx.fillStyle = '#173D4A';
+        ctx.fillText(String(s.pair_difference), x + colWidths[6] / 2, y + rowHeight / 2);
+      });
+
+      // Footer
+      const footerY = tableTop + 50 + (standings.length * rowHeight) + 30;
+      ctx.fillStyle = '#718792';
+      ctx.font = '12px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
+      ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
+
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Gagal membuat gambar'));
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        
+        // Cleanup
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          resolve();
+        }, 100);
+      }, 'image/png', 1.0);
+
+    } catch (error) {
+      reject(error);
     }
-
-    // Position badge
-    ctx.beginPath();
-    ctx.arc(80, y + rowHeight / 2, 18, 0, Math.PI * 2);
-    ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
-    ctx.fill();
-    ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
-    ctx.font = 'bold 14px Inter';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(idx + 1), 80, y + rowHeight / 2 + 5);
-
-    // Team logo placeholder
-    ctx.beginPath();
-    ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
-    ctx.fillStyle = '#16B9C0';
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px Inter';
-    ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2 + 5);
-
-    // Team name
-    ctx.fillStyle = '#173D4A';
-    ctx.font = '500 14px Inter';
-    ctx.textAlign = 'left';
-    ctx.fillText(team?.name || 'Unknown', 190, y + rowHeight / 2 + 5);
-
-    // Stats
-    ctx.textAlign = 'center';
-    ctx.font = '14px Inter';
-    ctx.fillStyle = '#173D4A';
-    x = 40 + colWidths[0] + colWidths[1];
-    ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2 + 5);
-    x += colWidths[2];
-    ctx.font = 'bold 14px Inter';
-    ctx.fillStyle = '#087E91';
-    ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2 + 5);
-    x += colWidths[3];
-    ctx.font = '14px Inter';
-    ctx.fillStyle = '#2EAD72';
-    ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2 + 5);
-    x += colWidths[4];
-    ctx.fillStyle = '#E65C5C';
-    ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2 + 5);
-    x += colWidths[5];
-    ctx.fillStyle = '#173D4A';
-    ctx.fillText(String(s.pair_difference), x + colWidths[6] / 2, y + rowHeight / 2 + 5);
   });
-
-  // Footer
-  const footerY = tableTop + 50 + (standings.length * rowHeight) + 30;
-  ctx.fillStyle = '#718792';
-  ctx.font = '12px Inter';
-  ctx.textAlign = 'center';
-  ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
-  ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
-
-  // Download
-  canvas.toBlob((blob) => {
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  }, 'image/png');
 };
 
 // App Component
@@ -533,15 +561,39 @@ const HomeView: React.FC<{
 // ============ STANDINGS VIEW ============
 const StandingsView: React.FC<{ teams: Team[]; standings: Standing[]; league: any; onViewTeam: (id: string) => void }> = ({ teams, standings, league, onViewTeam }) => {
   const getTeam = (id: string) => teams.find(t => t.id === id);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadStandingsPNG(standings, teams, league);
+    } catch (error) {
+      console.error('Download error:', error);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>Klasemen Liga</h1>
-        <button onClick={() => downloadStandingsPNG(standings, teams, league)} style={{
-          padding: '8px 16px', background: C.primary, color: '#fff', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-        }}>
-          ⬇ Download PNG
+        <button 
+          onClick={handleDownload} 
+          disabled={downloading}
+          style={{
+            padding: '8px 16px', 
+            background: downloading ? C.textSecondary : C.primary, 
+            color: '#fff', 
+            borderRadius: 8, 
+            fontSize: 12, 
+            fontWeight: 600, 
+            border: 'none', 
+            cursor: downloading ? 'not-allowed' : 'pointer',
+            opacity: downloading ? 0.7 : 1,
+          }}
+        >
+          {downloading ? '⏳ Membuat...' : '⬇ Download PNG'}
         </button>
       </div>
       <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
