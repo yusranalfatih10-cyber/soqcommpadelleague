@@ -64,13 +64,13 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; logoUrl?: string }> = ({ size 
   );
 };
 
-// Download Klasemen PNG - Simple & Reliable Version
-const downloadStandingsPNG = async (standings: Standing[], teams: Team[], league: any): Promise<void> => {
+// Generate klasemen image data URL
+const generateStandingsImage = (standings: Standing[], teams: Team[], league: any): string => {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   
   if (!ctx) {
-    throw new Error('Browser tidak mendukung Canvas API');
+    return '';
   }
 
   const width = 1920;
@@ -92,45 +92,16 @@ const downloadStandingsPNG = async (standings: Standing[], teams: Team[], league
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, headerHeight);
 
-  // Logo
-  if (league.logo_url) {
-    try {
-      const logoImg = new Image();
-      logoImg.crossOrigin = 'anonymous';
-      await new Promise((resolve, reject) => {
-        logoImg.onload = resolve;
-        logoImg.onerror = reject;
-        logoImg.src = league.logo_url;
-      });
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(100, 100, 50, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(logoImg, 50, 50, 100, 100);
-      ctx.restore();
-    } catch (e) {
-      // Fallback to default logo
-      ctx.beginPath();
-      ctx.arc(100, 100, 50, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 40px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('S', 100, 100);
-    }
-  } else {
-    ctx.beginPath();
-    ctx.arc(100, 100, 50, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 40px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('S', 100, 100);
-  }
+  // Default logo circle
+  ctx.beginPath();
+  ctx.arc(100, 100, 50, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 40px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('S', 100, 100);
 
   // Title
   ctx.fillStyle = '#fff';
@@ -184,40 +155,16 @@ const downloadStandingsPNG = async (standings: Standing[], teams: Team[], league
     ctx.textBaseline = 'middle';
     ctx.fillText(String(idx + 1), 80, y + rowHeight / 2);
 
-    // Team logo or placeholder
-    if (team?.logo_url) {
-      try {
-        const teamImg = new Image();
-        teamImg.crossOrigin = 'anonymous';
-        teamImg.src = team.logo_url;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(teamImg, 130, y + rowHeight / 2 - 20, 40, 40);
-        ctx.restore();
-      } catch (e) {
-        ctx.beginPath();
-        ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
-        ctx.fillStyle = '#16B9C0';
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
-      }
-    } else {
-      ctx.beginPath();
-      ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
-      ctx.fillStyle = '#16B9C0';
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 16px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
-    }
+    // Team logo placeholder
+    ctx.beginPath();
+    ctx.arc(150, y + rowHeight / 2, 20, 0, Math.PI * 2);
+    ctx.fillStyle = '#16B9C0';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(team?.name.charAt(0) || '?', 150, y + rowHeight / 2);
 
     // Team name
     ctx.fillStyle = '#173D4A';
@@ -257,12 +204,263 @@ const downloadStandingsPNG = async (standings: Standing[], teams: Team[], league
   ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
   ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
 
-  // Simple download using toDataURL
-  const dataURL = canvas.toDataURL('image/png');
-  const link = document.createElement('a');
-  link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
-  link.href = dataURL;
-  link.click();
+  return canvas.toDataURL('image/png');
+};
+
+// Download Modal Component
+const DownloadModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  standings: Standing[];
+  teams: Team[];
+  league: any;
+}> = ({ isOpen, onClose, standings, teams, league }) => {
+  const [imageData, setImageData] = useState<string>('');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      const data = generateStandingsImage(standings, teams, league);
+      setImageData(data);
+    }
+  }, [isOpen, standings, teams, league]);
+
+  const handleDownload = () => {
+    if (!imageData) return;
+    
+    const link = document.createElement('a');
+    link.href = imageData;
+    link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleOpenInNewTab = () => {
+    if (!imageData) return;
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Klasemen SOQ.COMM PADEL LEAGUE</title>
+            <style>
+              body { margin: 0; padding: 20px; background: #f5fbfc; display: flex; flex-direction: column; align-items: center; }
+              img { max-width: 100%; height: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+              .buttons { margin-top: 20px; display: flex; gap: 10px; }
+              button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+              .download { background: #16B9C0; color: white; }
+              .close { background: #DCECEF; color: #173D4A; }
+            </style>
+          </head>
+          <body>
+            <img src="${imageData}" alt="Klasemen" />
+            <div class="buttons">
+              <button class="download" onclick="download()">💾 Download Gambar</button>
+              <button class="close" onclick="window.close()">✕ Tutup</button>
+            </div>
+            <script>
+              function download() {
+                const link = document.createElement('a');
+                link.href = '${imageData}';
+                link.download = 'SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png';
+                link.click();
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      newWindow.document.close();
+    }
+  };
+
+  const handlePrint = () => {
+    if (!imageData) return;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Klasemen</title>
+            <style>
+              @media print { body { margin: 0; } img { width: 100%; } }
+              body { margin: 0; padding: 20px; }
+              img { width: 100%; }
+            </style>
+          </head>
+          <body>
+            <img src="${imageData}" alt="Klasemen" onload="window.print()" />
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: 20,
+    }}>
+      <div style={{
+        background: C.surface,
+        borderRadius: 16,
+        maxWidth: 900,
+        width: '100%',
+        maxHeight: '90vh',
+        overflow: 'auto',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '20px 24px',
+          borderBottom: `1px solid ${C.border}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'sticky',
+          top: 0,
+          background: C.surface,
+          zIndex: 10,
+        }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>
+            Download Klasemen
+          </h2>
+          <button onClick={onClose} style={{
+            background: 'none',
+            border: 'none',
+            fontSize: 24,
+            color: C.textSecondary,
+            cursor: 'pointer',
+            padding: 0,
+            lineHeight: 1,
+          }}>×</button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: 24 }}>
+          {/* Preview */}
+          {imageData ? (
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 13, color: C.textSecondary, marginBottom: 12 }}>Preview Klasemen:</p>
+              <div style={{
+                border: `2px solid ${C.border}`,
+                borderRadius: 8,
+                overflow: 'hidden',
+                background: C.bg,
+              }}>
+                <img 
+                  src={imageData} 
+                  alt="Preview Klasemen" 
+                  style={{ width: '100%', height: 'auto', display: 'block' }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <p style={{ color: C.textSecondary }}>Membuat gambar klasemen...</p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+            <button
+              onClick={handleDownload}
+              disabled={!imageData}
+              style={{
+                padding: '14px 20px',
+                background: imageData ? C.primary : C.border,
+                color: '#fff',
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                border: 'none',
+                cursor: imageData ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              💾 Download PNG
+            </button>
+
+            <button
+              onClick={handleOpenInNewTab}
+              disabled={!imageData}
+              style={{
+                padding: '14px 20px',
+                background: imageData ? C.secondary : C.border,
+                color: '#fff',
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                border: 'none',
+                cursor: imageData ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              🔗 Buka di Tab Baru
+            </button>
+
+            <button
+              onClick={handlePrint}
+              disabled={!imageData}
+              style={{
+                padding: '14px 20px',
+                background: imageData ? C.accent : C.border,
+                color: '#fff',
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                border: 'none',
+                cursor: imageData ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              🖨️ Print
+            </button>
+          </div>
+
+          {/* Info */}
+          <div style={{
+            marginTop: 20,
+            padding: 16,
+            background: C.bg,
+            borderRadius: 8,
+            fontSize: 12,
+            color: C.textSecondary,
+            lineHeight: 1.6,
+          }}>
+            <strong style={{ color: C.textPrimary }}>Tips:</strong>
+            <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+              <li><strong>Download PNG:</strong> Menyimpan gambar langsung ke perangkat Anda</li>
+              <li><strong>Buka di Tab Baru:</strong> Jika download tidak berfungsi, buka gambar di tab baru lalu klik kanan → Save Image As</li>
+              <li><strong>Print:</strong> Cetak klasemen langsung atau simpan sebagai PDF</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // App Component
@@ -608,41 +806,37 @@ const HomeView: React.FC<{
 // ============ STANDINGS VIEW ============
 const StandingsView: React.FC<{ teams: Team[]; standings: Standing[]; league: any; onViewTeam: (id: string) => void }> = ({ teams, standings, league, onViewTeam }) => {
   const getTeam = (id: string) => teams.find(t => t.id === id);
-  const [downloading, setDownloading] = useState(false);
-
-  const handleDownload = async () => {
-    setDownloading(true);
-    try {
-      await downloadStandingsPNG(standings, teams, league);
-    } catch (error) {
-      console.error('Download error:', error);
-    } finally {
-      setDownloading(false);
-    }
-  };
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   return (
     <div className="animate-fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>Klasemen Liga</h1>
         <button 
-          onClick={handleDownload} 
-          disabled={downloading}
+          onClick={() => setShowDownloadModal(true)}
           style={{
             padding: '8px 16px', 
-            background: downloading ? C.textSecondary : C.primary, 
+            background: C.primary, 
             color: '#fff', 
             borderRadius: 8, 
             fontSize: 12, 
             fontWeight: 600, 
             border: 'none', 
-            cursor: downloading ? 'not-allowed' : 'pointer',
-            opacity: downloading ? 0.7 : 1,
+            cursor: 'pointer',
           }}
         >
-          {downloading ? '⏳ Membuat...' : '⬇ Download PNG'}
+          ⬇ Download Klasemen
         </button>
       </div>
+
+      {/* Download Modal */}
+      <DownloadModal
+        isOpen={showDownloadModal}
+        onClose={() => setShowDownloadModal(false)}
+        standings={standings}
+        teams={teams}
+        league={league}
+      />
       <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 700 }}>
