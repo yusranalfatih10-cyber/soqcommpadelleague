@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { store } from './store';
 import { Page, Team, Match, Matchday, Standing, PairMatchResult, Pair, Player, User } from './types';
 import { v4 as uuidv4 } from 'uuid';
@@ -527,8 +527,34 @@ function App() {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [, setRefresh] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => setRefresh(r => r + 1), []);
+
+  // Initialize store from Supabase
+  useEffect(() => {
+    store.init().then(() => {
+      setLoading(false);
+    });
+  }, []);
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: C.bg,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+      }}>
+        <Logo size="lg" />
+        <p style={{ color: C.textSecondary, fontSize: 14 }}>Memuat data dari cloud...</p>
+      </div>
+    );
+  }
 
   const handleNavigate = (page: Page) => {
     setCurrentPage(page);
@@ -1494,9 +1520,9 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
     onRefresh();
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = store.loginUser(email, password);
+    const user = await store.loginUser(email, password);
     if (user) {
       setLoggedIn(true);
       setCurrentUser(user);
@@ -1506,8 +1532,8 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
     }
   };
 
-  const handleLogout = () => {
-    store.logoutUser();
+  const handleLogout = async () => {
+    await store.logoutUser();
     setLoggedIn(false);
     setCurrentUser(null);
     onExit();
@@ -1619,7 +1645,7 @@ const AdminScores: React.FC<{ notify: (type: string, msg: string) => void }> = (
   const availableMatches = matches.filter(m => m.status === 'upcoming' || m.status === 'ongoing');
   const match = matches.find(m => m.id === selectedMatch);
 
-  const handleSave = (draft: boolean) => {
+  const handleSave = async (draft: boolean) => {
     if (!match) return;
     const results = scores.map((s, idx) => ({
       match_id: match.id,
@@ -1632,11 +1658,11 @@ const AdminScores: React.FC<{ notify: (type: string, msg: string) => void }> = (
       status: draft ? 'pending' as const : 'completed' as const,
     }));
     if (!draft) {
-      store.saveMatchResult(match.id, results);
+      await store.saveMatchResult(match.id, results);
       notify('success', 'Hasil disahkan!');
     } else {
-      const all = store.getPairResults().filter(r => r.match_id !== match.id);
-      store.savePairResults([...all, ...results.map(r => ({ ...r, id: uuidv4() }))]);
+      // Save as draft (pending status)
+      await store.saveMatchResult(match.id, results.map(r => ({ ...r, status: 'pending' as const })));
       notify('success', 'Draft disimpan');
     }
     setSelectedMatch('');
