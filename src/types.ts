@@ -91,11 +91,31 @@ export interface PairMatchResult {
 export interface Standing {
   team_id: string;
   played: number;
-  won: number;
-  lost: number;
+  total_points: number; // Total poin dari semua partai pasangan
   pair_wins: number;
   pair_losses: number;
-  points: number;
+  pair_difference: number;
+  head_to_head_points?: Record<string, number>; // Untuk tie-break
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string; // Base64 encoded (untuk demo, bukan production)
+  role: 'super_admin' | 'admin' | 'operator';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  user_id: string;
+  user_name: string;
+  action: string;
+  details: string;
+  timestamp: string;
 }
 
 export interface AdminUser {
