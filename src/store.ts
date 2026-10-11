@@ -218,7 +218,12 @@ class Store {
   }
 
   async saveLeague(league: Partial<League> & { id: string }) {
-    if (!this.league) return;
+    if (!this.league) {
+      console.error('❌ No league data available');
+      throw new Error('No league data available');
+    }
+
+    console.log('🔵 Saving league to Supabase:', league);
 
     const { error } = await supabase
       .from('leagues')
@@ -233,8 +238,14 @@ class Store {
       })
       .eq('id', league.id);
 
-    if (!error && this.league) {
+    if (error) {
+      console.error('❌ Error saving league:', error);
+      throw error;
+    }
+
+    if (this.league) {
       this.league = { ...this.league, ...league, updated_at: new Date().toISOString() };
+      console.log('✅ League saved successfully');
       this.notify();
     }
   }
@@ -245,36 +256,61 @@ class Store {
   }
 
   async addTeam(team: Omit<Team, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('teams')
-      .insert([team])
-      .select()
-      .single();
+    try {
+      console.log('🔵 Adding team to Supabase:', team);
+      
+      const { data, error } = await supabase
+        .from('teams')
+        .insert([team])
+        .select()
+        .single();
 
-    if (!error && data) {
-      this.teams = [...this.teams, data];
-      this.notify();
-      return data;
+      if (error) {
+        console.error('❌ Error adding team:', error);
+        throw error;
+      }
+
+      if (data) {
+        console.log('✅ Team added successfully:', data);
+        this.teams = [...this.teams, data];
+        this.notify();
+        return data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('❌ Exception in addTeam:', error);
+      throw error;
     }
-    return null;
   }
 
   async updateTeam(team: Team) {
-    const { error } = await supabase
-      .from('teams')
-      .update({
-        name: team.name,
-        logo_url: team.logo_url,
-        captain: team.captain,
-        description: team.description,
-        is_active: team.is_active,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', team.id);
+    try {
+      console.log('🔵 Updating team in Supabase:', team);
+      
+      const { error } = await supabase
+        .from('teams')
+        .update({
+          name: team.name,
+          logo_url: team.logo_url,
+          captain: team.captain,
+          description: team.description,
+          is_active: team.is_active,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', team.id);
 
-    if (!error) {
+      if (error) {
+        console.error('❌ Error updating team:', error);
+        throw error;
+      }
+
+      console.log('✅ Team updated successfully');
       this.teams = this.teams.map(t => t.id === team.id ? { ...team, updated_at: new Date().toISOString() } : t);
       this.notify();
+    } catch (error) {
+      console.error('❌ Exception in updateTeam:', error);
+      throw error;
     }
   }
 
@@ -284,34 +320,59 @@ class Store {
   }
 
   async addPlayer(player: Omit<Player, 'id' | 'created_at'>) {
-    const { data, error } = await supabase
-      .from('players')
-      .insert([player])
-      .select()
-      .single();
+    try {
+      console.log('🔵 Adding player to Supabase:', player);
+      
+      const { data, error } = await supabase
+        .from('players')
+        .insert([player])
+        .select()
+        .single();
 
-    if (!error && data) {
-      this.players = [...this.players, data];
-      this.notify();
-      return data;
+      if (error) {
+        console.error('❌ Error adding player:', error);
+        throw error;
+      }
+
+      if (data) {
+        console.log('✅ Player added successfully:', data);
+        this.players = [...this.players, data];
+        this.notify();
+        return data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('❌ Exception in addPlayer:', error);
+      throw error;
     }
-    return null;
   }
 
   async updatePlayer(player: Player) {
-    const { error } = await supabase
-      .from('players')
-      .update({
-        name: player.name,
-        team_id: player.team_id,
-        photo_url: player.photo_url,
-        is_active: player.is_active,
-      })
-      .eq('id', player.id);
+    try {
+      console.log('🔵 Updating player in Supabase:', player);
+      
+      const { error } = await supabase
+        .from('players')
+        .update({
+          name: player.name,
+          team_id: player.team_id,
+          photo_url: player.photo_url,
+          is_active: player.is_active,
+        })
+        .eq('id', player.id);
 
-    if (!error) {
+      if (error) {
+        console.error('❌ Error updating player:', error);
+        throw error;
+      }
+
+      console.log('✅ Player updated successfully');
       this.players = this.players.map(p => p.id === player.id ? player : p);
       this.notify();
+    } catch (error) {
+      console.error('❌ Exception in updatePlayer:', error);
+      throw error;
     }
   }
 
@@ -368,17 +429,28 @@ class Store {
   }
 
   async deleteMatch(matchId: string) {
-    await supabase.from('pair_match_results').delete().eq('match_id', matchId);
-    
-    const { error } = await supabase
-      .from('matches')
-      .delete()
-      .eq('id', matchId);
+    try {
+      console.log('🔵 Deleting match from Supabase:', matchId);
+      
+      await supabase.from('pair_match_results').delete().eq('match_id', matchId);
+      
+      const { error } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', matchId);
 
-    if (!error) {
+      if (error) {
+        console.error('❌ Error deleting match:', error);
+        throw error;
+      }
+
+      console.log('✅ Match deleted successfully');
       this.matches = this.matches.filter(m => m.id !== matchId);
       this.pairResults = this.pairResults.filter(r => r.match_id !== matchId);
       this.notify();
+    } catch (error) {
+      console.error('❌ Exception in deleteMatch:', error);
+      throw error;
     }
   }
 
@@ -465,24 +537,40 @@ class Store {
   }
 
   async addUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .insert([{
-        ...user,
-        password_hash: btoa(user.password_hash),
-      }])
-      .select()
-      .single();
+    try {
+      console.log('🔵 Adding user to Supabase:', user);
+      
+      const { data, error } = await supabase
+        .from('admin_users')
+        .insert([{
+          ...user,
+          password_hash: btoa(user.password_hash),
+        }])
+        .select()
+        .single();
 
-    if (!error && data) {
-      this.users = [...this.users, data];
-      if (this.currentUser) {
-        await this.addAuditLog(this.currentUser.id, this.currentUser.name, 'ADD_USER', `Added user: ${user.name}`);
+      if (error) {
+        console.error('❌ Error adding user:', error);
+        throw error;
       }
-      this.notify();
-      return data;
+
+      if (data) {
+        console.log('✅ User added successfully:', data);
+        this.users = [...this.users, data];
+        
+        if (this.currentUser) {
+          await this.addAuditLog(this.currentUser.id, this.currentUser.name, 'ADD_USER', `Added user: ${user.name}`);
+        }
+        
+        this.notify();
+        return data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('❌ Exception in addUser:', error);
+      throw error;
     }
-    return null;
   }
 
   async updateUser(user: User) {

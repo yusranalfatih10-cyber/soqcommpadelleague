@@ -104,10 +104,15 @@ const GeneralSettings: React.FC<{ notify: (type: string, msg: string) => void; o
     }
   };
 
-  const handleSave = () => {
-    store.saveLeague({ ...league, name, season, description: desc, status, logo_url: logoUrl });
-    notify('success', 'Pengaturan umum disimpan');
-    onRefresh();
+  const handleSave = async () => {
+    try {
+      await store.saveLeague({ ...league, name, season, description: desc, status, logo_url: logoUrl });
+      notify('success', 'Pengaturan umum disimpan');
+      onRefresh();
+    } catch (error) {
+      console.error('Error saving league:', error);
+      notify('error', 'Gagal menyimpan pengaturan. Silakan coba lagi.');
+    }
   };
 
   return (
@@ -188,26 +193,38 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void; o
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       notify('error', 'Nama tim harus diisi');
       return;
     }
-    if (editingTeam) {
-      store.updateTeam({ ...editingTeam, name, captain, description: desc, logo_url: logoUrl });
-      notify('success', 'Tim berhasil diperbarui');
-    } else {
-      store.addTeam({ name, captain, description: desc, logo_url: logoUrl, is_active: true });
-      notify('success', 'Tim baru berhasil ditambahkan');
+    
+    try {
+      if (editingTeam) {
+        await store.updateTeam({ ...editingTeam, name, captain, description: desc, logo_url: logoUrl });
+        notify('success', 'Tim berhasil diperbarui');
+      } else {
+        const result = await store.addTeam({ name, captain, description: desc, logo_url: logoUrl, is_active: true });
+        if (result) {
+          notify('success', 'Tim baru berhasil ditambahkan');
+        } else {
+          notify('error', 'Gagal menambahkan tim. Silakan coba lagi.');
+          return;
+        }
+      }
+      
+      setTeams(store.getTeams());
+      setShowForm(false);
+      setEditingTeam(null);
+      setName('');
+      setCaptain('');
+      setDesc('');
+      setLogoUrl('');
+      onRefresh();
+    } catch (error) {
+      console.error('Error saving team:', error);
+      notify('error', 'Terjadi kesalahan. Silakan coba lagi.');
     }
-    setTeams(store.getTeams());
-    setShowForm(false);
-    setEditingTeam(null);
-    setName('');
-    setCaptain('');
-    setDesc('');
-    setLogoUrl('');
-    onRefresh();
   };
 
   const handleEdit = (team: Team) => {
@@ -219,13 +236,18 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void; o
     setShowForm(true);
   };
 
-  const handleToggleActive = (teamId: string) => {
+  const handleToggleActive = async (teamId: string) => {
     const team = teams.find(t => t.id === teamId);
     if (team) {
-      store.updateTeam({ ...team, is_active: !team.is_active });
-      setTeams(store.getTeams());
-      notify('success', `Tim ${team.is_active ? 'dinonaktifkan' : 'diaktifkan'}`);
-      onRefresh();
+      try {
+        await store.updateTeam({ ...team, is_active: !team.is_active });
+        setTeams(store.getTeams());
+        notify('success', `Tim ${team.is_active ? 'dinonaktifkan' : 'diaktifkan'}`);
+        onRefresh();
+      } catch (error) {
+        console.error('Error toggling team:', error);
+        notify('error', 'Gagal mengubah status tim. Silakan coba lagi.');
+      }
     }
   };
 
@@ -329,25 +351,37 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void;
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !teamId) {
       notify('error', 'Nama dan tim harus diisi');
       return;
     }
-    if (editingPlayer) {
-      store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl });
-      notify('success', 'Pemain berhasil diperbarui');
-    } else {
-      store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true });
-      notify('success', 'Pemain baru berhasil ditambahkan');
+    
+    try {
+      if (editingPlayer) {
+        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl });
+        notify('success', 'Pemain berhasil diperbarui');
+      } else {
+        const result = await store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true });
+        if (result) {
+          notify('success', 'Pemain baru berhasil ditambahkan');
+        } else {
+          notify('error', 'Gagal menambahkan pemain. Silakan coba lagi.');
+          return;
+        }
+      }
+      
+      setPlayers(store.getPlayers());
+      setShowForm(false);
+      setEditingPlayer(null);
+      setName('');
+      setTeamId('');
+      setPhotoUrl('');
+      onRefresh();
+    } catch (error) {
+      console.error('Error saving player:', error);
+      notify('error', 'Terjadi kesalahan. Silakan coba lagi.');
     }
-    setPlayers(store.getPlayers());
-    setShowForm(false);
-    setEditingPlayer(null);
-    setName('');
-    setTeamId('');
-    setPhotoUrl('');
-    onRefresh();
   };
 
   const handleEdit = (player: Player) => {
@@ -358,13 +392,18 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void;
     setShowForm(true);
   };
 
-  const handleToggleActive = (playerId: string) => {
+  const handleToggleActive = async (playerId: string) => {
     const player = players.find(p => p.id === playerId);
     if (player) {
-      store.updatePlayer({ ...player, is_active: !player.is_active });
-      setPlayers(store.getPlayers());
-      notify('success', `Pemain ${player.is_active ? 'dinonaktifkan' : 'diaktifkan'}`);
-      onRefresh();
+      try {
+        await store.updatePlayer({ ...player, is_active: !player.is_active });
+        setPlayers(store.getPlayers());
+        notify('success', `Pemain ${player.is_active ? 'dinonaktifkan' : 'diaktifkan'}`);
+        onRefresh();
+      } catch (error) {
+        console.error('Error toggling player:', error);
+        notify('error', 'Gagal mengubah status pemain. Silakan coba lagi.');
+      }
     }
   };
 
@@ -454,26 +493,38 @@ const UsersManagement: React.FC<{ notify: (type: string, msg: string) => void; o
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<User['role']>('operator');
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !email.trim() || (!editingUser && !password.trim())) {
       notify('error', 'Semua field harus diisi');
       return;
     }
-    if (editingUser) {
-      store.updateUser({ ...editingUser, name, email, role });
-      notify('success', 'User berhasil diperbarui');
-    } else {
-      store.addUser({ name, email, password_hash: password, role, is_active: true });
-      notify('success', 'User baru berhasil ditambahkan');
+    
+    try {
+      if (editingUser) {
+        await store.updateUser({ ...editingUser, name, email, role });
+        notify('success', 'User berhasil diperbarui');
+      } else {
+        const result = await store.addUser({ name, email, password_hash: password, role, is_active: true });
+        if (result) {
+          notify('success', 'User baru berhasil ditambahkan');
+        } else {
+          notify('error', 'Gagal menambahkan user. Silakan coba lagi.');
+          return;
+        }
+      }
+      
+      setUsers(store.getUsers());
+      setShowForm(false);
+      setEditingUser(null);
+      setName('');
+      setEmail('');
+      setPassword('');
+      setRole('operator');
+      onRefresh();
+    } catch (error) {
+      console.error('Error saving user:', error);
+      notify('error', 'Terjadi kesalahan. Silakan coba lagi.');
     }
-    setUsers(store.getUsers());
-    setShowForm(false);
-    setEditingUser(null);
-    setName('');
-    setEmail('');
-    setPassword('');
-    setRole('operator');
-    onRefresh();
   };
 
   const handleEdit = (user: User) => {
@@ -484,12 +535,17 @@ const UsersManagement: React.FC<{ notify: (type: string, msg: string) => void; o
     setShowForm(true);
   };
 
-  const handleDelete = (userId: string) => {
+  const handleDelete = async (userId: string) => {
     if (confirm('Yakin ingin menghapus user ini?')) {
-      store.deleteUser(userId);
-      setUsers(store.getUsers());
-      notify('success', 'User berhasil dihapus');
-      onRefresh();
+      try {
+        await store.deleteUser(userId);
+        setUsers(store.getUsers());
+        notify('success', 'User berhasil dihapus');
+        onRefresh();
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        notify('error', 'Gagal menghapus user. Silakan coba lagi.');
+      }
     }
   };
 
@@ -558,10 +614,15 @@ const StandingsSettings: React.FC<{ notify: (type: string, msg: string) => void;
   const league = store.getLeague();
   const [tiebreakOrder, setTiebreakOrder] = useState(league.settings.tiebreak_order);
 
-  const handleSave = () => {
-    store.saveLeague({ ...league, settings: { ...league.settings, tiebreak_order: tiebreakOrder } });
-    notify('success', 'Pengaturan klasemen disimpan');
-    onRefresh();
+  const handleSave = async () => {
+    try {
+      await store.saveLeague({ ...league, settings: { ...league.settings, tiebreak_order: tiebreakOrder } });
+      notify('success', 'Pengaturan klasemen disimpan');
+      onRefresh();
+    } catch (error) {
+      console.error('Error saving standings settings:', error);
+      notify('error', 'Gagal menyimpan pengaturan. Silakan coba lagi.');
+    }
   };
 
   return (
@@ -590,16 +651,21 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
   const teams = store.getTeams();
   const matchdays = store.getMatchdays();
 
-  const handleDelete = (matchId: string) => {
+  const handleDelete = async (matchId: string) => {
     const match = matches.find(m => m.id === matchId);
     if (match && match.status === 'completed') {
       notify('error', 'Tidak dapat menghapus pertandingan yang sudah selesai');
       return;
     }
     if (confirm('Yakin ingin menghapus jadwal pertandingan ini?')) {
-      store.deleteMatch(matchId);
-      notify('success', 'Jadwal berhasil dihapus');
-      onRefresh();
+      try {
+        await store.deleteMatch(matchId);
+        notify('success', 'Jadwal berhasil dihapus');
+        onRefresh();
+      } catch (error) {
+        console.error('Error deleting match:', error);
+        notify('error', 'Gagal menghapus jadwal. Silakan coba lagi.');
+      }
     }
   };
 
