@@ -96,16 +96,53 @@ const generateStandingsImage = async (standings: Standing[], teams: Team[], leag
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, headerHeight);
 
-      // Logo circle
-      ctx.beginPath();
-      ctx.arc(100, 110, 50, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 40px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('S', 100, 110);
+      // Logo liga
+      const drawLogo = () => {
+        return new Promise<void>((resolveLogo) => {
+          if (league.logo_url) {
+            const logoImg = new Image();
+            logoImg.onload = () => {
+              // Gambar logo dengan clipping circular
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(100, 110, 50, 0, Math.PI * 2);
+              ctx.clip();
+              ctx.drawImage(logoImg, 50, 60, 100, 100);
+              ctx.restore();
+              resolveLogo();
+            };
+            logoImg.onerror = () => {
+              // Fallback ke logo default jika gagal memuat
+              ctx.beginPath();
+              ctx.arc(100, 110, 50, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.2)';
+              ctx.fill();
+              ctx.fillStyle = '#fff';
+              ctx.font = 'bold 40px Arial, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('S', 100, 110);
+              resolveLogo();
+            };
+            logoImg.src = league.logo_url;
+          } else {
+            // Logo default jika tidak ada logo
+            ctx.beginPath();
+            ctx.arc(100, 110, 50, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 40px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('S', 100, 110);
+            resolveLogo();
+          }
+        });
+      };
+
+      // Gambar logo dan lanjutkan
+      drawLogo().then(() => {
 
       // Title
       ctx.fillStyle = '#fff';
@@ -218,6 +255,7 @@ const generateStandingsImage = async (standings: Standing[], teams: Team[], leag
       // Convert to data URL
       const dataURL = canvas.toDataURL('image/png');
       resolve(dataURL);
+      }); // Close drawLogo().then()
     } catch (error) {
       console.error('Error generating image:', error);
       resolve('');
