@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { toPng } from 'html-to-image';
 import { store } from './store';
 import { Page, Team, Match, Matchday, Standing, PairMatchResult, Pair, Player, User } from './types';
 import { v4 as uuidv4 } from 'uuid';
@@ -65,108 +64,165 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; logoUrl?: string }> = ({ size 
   );
 };
 
-// Generate klasemen image using html-to-image
+// Generate klasemen image using Canvas API (more reliable)
 const generateStandingsImage = async (standings: Standing[], teams: Team[], league: any): Promise<string> => {
-  // Create a temporary div with klasemen HTML
-  const tempDiv = document.createElement('div');
-  tempDiv.style.position = 'absolute';
-  tempDiv.style.left = '-9999px';
-  tempDiv.style.top = '0';
-  tempDiv.style.width = '1200px';
-  tempDiv.style.background = '#F5FBFC';
-  tempDiv.style.padding = '40px';
-  tempDiv.style.fontFamily = 'Arial, sans-serif';
-  document.body.appendChild(tempDiv);
-
-  // Build HTML content
-  const headerHTML = `
-    <div style="background: linear-gradient(135deg, #087E91, #16B9C0); padding: 40px; border-radius: 12px; margin-bottom: 30px; color: white;">
-      <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
-        <div style="width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold;">S</div>
-        <div>
-          <h1 style="margin: 0; font-size: 32px; font-weight: bold;">KLASEMEN LIGA PADEL</h1>
-          <p style="margin: 5px 0 0 0; font-size: 18px; opacity: 0.9;">${league.name} • Season ${league.season}</p>
-          <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.7;">Diperbarui: ${new Date().toLocaleDateString('id-ID')}</p>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const tableHeaderHTML = `
-    <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-      <thead>
-        <tr style="background: #087E91; color: white;">
-          <th style="padding: 15px; text-align: center; font-weight: 600;">Pos</th>
-          <th style="padding: 15px; text-align: left; font-weight: 600;">Nama Tim</th>
-          <th style="padding: 15px; text-align: center; font-weight: 600;">Main</th>
-          <th style="padding: 15px; text-align: center; font-weight: 600;">Total Poin</th>
-          <th style="padding: 15px; text-align: center; font-weight: 600;">Pasangan Menang</th>
-          <th style="padding: 15px; text-align: center; font-weight: 600;">Pasangan Kalah</th>
-          <th style="padding: 15px; text-align: center; font-weight: 600;">Selisih</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-  const rowsHTML = standings.map((s, idx) => {
-    const team = teams.find(t => t.id === s.team_id);
-    const bgColor = idx === 0 ? 'rgba(168, 216, 46, 0.15)' : idx % 2 === 0 ? 'rgba(220, 236, 223, 0.3)' : 'white';
-    const posColor = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
-    const posTextColor = idx < 3 ? 'white' : '#718792';
-    
-    return `
-      <tr style="background: ${bgColor}; border-bottom: 1px solid #DCECEF;">
-        <td style="padding: 15px; text-align: center;">
-          <div style="width: 36px; height: 36px; border-radius: 50%; background: ${posColor}; color: ${posTextColor}; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">${idx + 1}</div>
-        </td>
-        <td style="padding: 15px; text-align: left;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="width: 40px; height: 40px; border-radius: 50%; background: #16B9C0; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px;">${team?.name.charAt(0) || '?'}</div>
-            <span style="font-weight: 500; color: #173D4A;">${team?.name || 'Unknown'}</span>
-          </div>
-        </td>
-        <td style="padding: 15px; text-align: center; color: #718792;">${s.played}</td>
-        <td style="padding: 15px; text-align: center;">
-          <span style="display: inline-block; padding: 4px 12px; background: rgba(22, 185, 192, 0.15); color: #087E91; border-radius: 6px; font-weight: bold;">${s.total_points}</span>
-        </td>
-        <td style="padding: 15px; text-align: center; color: #2EAD72; font-weight: 600;">${s.pair_wins}</td>
-        <td style="padding: 15px; text-align: center; color: #E65C5C; font-weight: 600;">${s.pair_losses}</td>
-        <td style="padding: 15px; text-align: center; font-weight: 500; color: #173D4A;">${s.pair_difference > 0 ? '+' : ''}${s.pair_difference}</td>
-      </tr>
-    `;
-  }).join('');
-
-  const footerHTML = `
-      </tbody>
-    </table>
-    <div style="margin-top: 30px; text-align: center; color: #718792; font-size: 12px;">
-      <p style="margin: 0;">Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.</p>
-      <p style="margin: 5px 0 0 0;">© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia</p>
-    </div>
-  `;
-
-  tempDiv.innerHTML = headerHTML + tableHeaderHTML + rowsHTML + footerHTML;
-
-  try {
-    // Convert to PNG using html-to-image
-    const dataUrl = await toPng(tempDiv, {
-      cacheBust: true,
-      width: 1200,
-      style: {
-        transform: 'scale(1)',
-        transformOrigin: 'top left',
+  return new Promise((resolve) => {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        console.error('Canvas context not available');
+        resolve('');
+        return;
       }
-    });
-    
-    // Clean up
-    document.body.removeChild(tempDiv);
-    
-    return dataUrl;
-  } catch (error) {
-    console.error('Error generating image:', error);
-    document.body.removeChild(tempDiv);
-    return '';
-  }
+
+      const width = 1920;
+      const rowHeight = 70;
+      const headerHeight = 220;
+      const height = headerHeight + (standings.length * rowHeight) + 120;
+      
+      canvas.width = width;
+      canvas.height = height;
+
+      // Background
+      ctx.fillStyle = '#F5FBFC';
+      ctx.fillRect(0, 0, width, height);
+
+      // Header gradient
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      gradient.addColorStop(0, '#087E91');
+      gradient.addColorStop(1, '#16B9C0');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, headerHeight);
+
+      // Logo circle
+      ctx.beginPath();
+      ctx.arc(100, 110, 50, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 40px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', 100, 110);
+
+      // Title
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 36px Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('KLASEMEN LIGA PADEL', 180, 90);
+      ctx.font = '18px Arial, sans-serif';
+      ctx.fillText(`${league.name} • Season ${league.season}`, 180, 120);
+      ctx.font = '14px Arial, sans-serif';
+      ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 180, 145);
+
+      // Table header
+      const tableTop = headerHeight + 20;
+      ctx.fillStyle = '#087E91';
+      ctx.fillRect(40, tableTop, width - 80, 50);
+      
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 15px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const cols = ['Pos', 'Nama Tim', 'Main', 'Total Poin', 'Pasangan Menang', 'Pasangan Kalah', 'Selisih'];
+      const colWidths = [80, 450, 100, 150, 180, 180, 150];
+      let x = 40;
+      cols.forEach((col, i) => {
+        ctx.fillText(col, x + colWidths[i] / 2, tableTop + 25);
+        x += colWidths[i];
+      });
+
+      // Table rows
+      standings.forEach((s, idx) => {
+        const team = teams.find(t => t.id === s.team_id);
+        const y = tableTop + 50 + (idx * rowHeight);
+        
+        // Row background
+        if (idx === 0) {
+          ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
+          ctx.fillRect(40, y, width - 80, rowHeight);
+        } else if (idx % 2 === 0) {
+          ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
+          ctx.fillRect(40, y, width - 80, rowHeight);
+        }
+
+        // Position badge
+        ctx.beginPath();
+        ctx.arc(80, y + rowHeight / 2, 20, 0, Math.PI * 2);
+        ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
+        ctx.fill();
+        ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
+        ctx.font = 'bold 16px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(idx + 1), 80, y + rowHeight / 2);
+
+        // Team logo placeholder
+        ctx.beginPath();
+        ctx.arc(160, y + rowHeight / 2, 22, 0, Math.PI * 2);
+        ctx.fillStyle = '#16B9C0';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 18px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(team?.name.charAt(0) || '?', 160, y + rowHeight / 2);
+
+        // Team name
+        ctx.fillStyle = '#173D4A';
+        ctx.font = '500 16px Arial, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(team?.name || 'Unknown', 200, y + rowHeight / 2);
+
+        // Stats
+        ctx.textAlign = 'center';
+        ctx.font = '16px Arial, sans-serif';
+        ctx.fillStyle = '#173D4A';
+        x = 40 + colWidths[0] + colWidths[1];
+        ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
+        x += colWidths[2];
+        
+        // Total points with background
+        ctx.fillStyle = 'rgba(22, 185, 192, 0.15)';
+        ctx.fillRect(x + 20, y + rowHeight / 2 - 15, colWidths[3] - 40, 30);
+        ctx.fillStyle = '#087E91';
+        ctx.font = 'bold 16px Arial, sans-serif';
+        ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
+        x += colWidths[3];
+        
+        ctx.font = 'bold 16px Arial, sans-serif';
+        ctx.fillStyle = '#2EAD72';
+        ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
+        x += colWidths[4];
+        ctx.fillStyle = '#E65C5C';
+        ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
+        x += colWidths[5];
+        ctx.fillStyle = '#173D4A';
+        ctx.font = '500 16px Arial, sans-serif';
+        ctx.fillText(`${s.pair_difference > 0 ? '+' : ''}${s.pair_difference}`, x + colWidths[6] / 2, y + rowHeight / 2);
+      });
+
+      // Footer
+      const footerY = tableTop + 50 + (standings.length * rowHeight) + 40;
+      ctx.fillStyle = '#718792';
+      ctx.font = '13px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
+      ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
+
+      // Convert to data URL
+      const dataURL = canvas.toDataURL('image/png');
+      resolve(dataURL);
+    } catch (error) {
+      console.error('Error generating image:', error);
+      resolve('');
+    }
+  });
 };
 
 // Download Modal Component
