@@ -649,13 +649,6 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [notification, setNotification] = useState<{ type: string; msg: string } | null>(null);
-
-  const notify = (type: string, msg: string) => {
-    setNotification({ type, msg });
-    setTimeout(() => setNotification(null), 3000);
-    onRefresh();
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -670,12 +663,6 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
     } catch (err: any) {
       setError(err.message || 'Login gagal');
     }
-  };
-
-  const handleLogout = async () => {
-    await store.logoutUser();
-    setLoggedIn(false);
-    onExit();
   };
 
   if (!loggedIn) {
@@ -705,28 +692,8 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
     );
   }
 
-  return (
-    <div style={{ minHeight: '100vh', background: C.bg }}>
-      {notification && (
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 100, padding: '10px 16px', borderRadius: 8, background: notification.type === 'success' ? C.success : C.error, color: '#fff', fontSize: 13, fontWeight: 500 }}>
-          {notification.msg}
-        </div>
-      )}
-      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Logo size="sm" />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onExit} style={{ padding: '6px 12px', fontSize: 12, color: C.textSecondary, background: 'none', border: 'none', cursor: 'pointer' }}>Lihat Situs</button>
-          <button onClick={handleLogout} style={{ padding: '6px 12px', fontSize: 12, color: C.error, background: `${C.error}10`, borderRadius: 8, border: 'none', cursor: 'pointer' }}>Logout</button>
-        </div>
-      </header>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 16 }}>
-        <React.Suspense fallback={<div style={{ textAlign: 'center', padding: 40, color: C.textSecondary }}>Memuat panel admin...</div>}>
-          <AdminSettingsLazy notify={notify} onRefresh={onRefresh} />
-        </React.Suspense>
-      </div>
-    </div>
-  );
+  return <AdminPanelLazy onExit={onExit} onRefresh={onRefresh} />;
 };
 
-// Lazy load AdminSettings
-const AdminSettingsLazy = React.lazy(() => import('./components/AdminSettings'));
+// Lazy load AdminPanel
+const AdminPanelLazy = React.lazy(() => import('./components/AdminPanel'));

@@ -297,6 +297,136 @@ class Store {
     if (!error) { this.users = this.users.filter(u => u.id !== userId); this.notify(); }
   }
 
+  async generateSchedule(teams: Team[], startDate: string, courts: number, replaceExisting: boolean) {
+    const n = teams.length;
+    if (n < 2) return;
+
+    const matchdays: Omit<Matchday, 'id'>[] = [];
+    const matches: Omit<Match, 'id' | 'created_at' | 'updated_at'>[] = [];
+    const numRounds = n - 1;
+
+    // Circle method for round-robin
+    const teamIds = teams.map(t => t.id);
+    if (n % 2 === 1) teamIds.push('BYE');
+
+    const start = new Date(startDate);
+
+    for (let round = 0; round < numRounds; round++) {
+      const date = new Date(start);
+      date.setDate(date.getDate() + round * 7);
+      
+      const matchday: Omit<Matchday, 'id'> = {
+        league_id: this.league?.id || '',
+        name: `Matchday ${round + 1}`,
+        matchday_number: round + 1,
+        date: date.toISOString().split('T')[0],
+        status: 'upcoming',
+      };
+      matchdays.push(matchday);
+
+      // Generate pairings for this round
+      const roundFixtures: [string, string][] = [];
+      for (let i = 0; i < Math.floor(n / 2); i++) {
+        const homeIdx = (round + i) % (n - 1);
+        const awayIdx = (n - 1 - i + round) % (n - 1);
+        if (homeIdx !== awayIdx) {
+          roundFixtures.push([teamIds[homeIdx], teamIds[awayIdx]]);
+        }
+      }
+
+      // Assign to courts and time slots
+      roundFixtures.forEach((fixture, idx) => {
+        const court = (idx % courts) + 1;
+        const slot = Math.floor(idx / courts);
+        const startHour = 16 + slot * 2;
+        
+        matches.push({
+          matchday_id: '', // Will be set after matchday is created
+          team_a_id: fixture[0],
+          team_b_id: fixture[1],
+          court,
+          start_time: `${startHour}:00`,
+          end_time: `${startHour + 2}:00`,
+          status: 'upcoming',
+          winner_team_id: null,
+        });
+      });
+
+      // Rotate teams (circle method)
+      const last = teamIds.pop()!;
+      teamIds.splice(1, 0, last);
+    }
+
+    if (replaceExisting) {
+      // Delete existing upcoming matchdays and matches
+      const upcomingMatchdays = this.matchdays.filter(md => md.status !== 'completed');
+      for (const md of upcomingMatchdays) {
+        await supabase.from('matches').delete().eq('matchday_id', md.id);
+        await supabase.from('matchdays').delete().eq('id', md.id);
+      }
+      this.matchdays = this.matchdays.filter(md => md.status === 'completed');
+      this.matches = this.matches.filter(m => {
+        const md = this.matchdays.find(d => d.id === m.matchday_id);
+        return md !== undefined;
+      });
+    }
+
+    // Insert new matchdays and matches
+    for (let i = 0; i < matchdays.length; i++) {
+      const { data: mdData } = await supabase.from('matchdays').insert([matchdays[i]]).select().single();
+      if (mdData) {
+        this.matchdays = [...this.matchdays, mdData];
+        
+        // Insert matches for this matchday
+        const roundMatches = matches.slice(i * Math.floor(n / 2), (i + 1) * Math.floor(n / 2));
+        for (const match of roundMatches) {
+          const { data: matchData } = await supabase.from('matches').insert([{
+            ...match,
+            matchday_id: mdData.id,
+          }]).select().single();
+          
+          if (matchData) {
+            this.matches = [...this.matches, matchData];
+          }
+        }
+      }
+    }
+
+    this.notify();
+  }
+
+  async resetCompetitionData() {
+    await supabase.from('pair_match_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matchdays').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+    this.matches = [];
+    this.matchdays = [];
+    this.pairResults = [];
+
+    this.notify();
+  }
+
+  async resetFullLeague() {
+    await supabase.from('pair_match_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matchdays').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('pairs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('players').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('teams').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('admin_users').delete().neq('role', 'super_admin');
+
+    this.matches = [];
+    this.matchdays = [];
+    this.pairResults = [];
+    this.pairs = [];
+    this.players = [];
+    this.teams = [];
+    this.users = this.users.filter(u => u.role === 'super_admin');
+
+    this.notify();
+  }
+
   getMVPs(): MVP[] { return this.mvps; }
   async addMVP(mvp: Omit<MVP, 'id' | 'created_at'>) {
     const { data, error } = await supabase.from('mvps').insert([mvp]).select().single();
