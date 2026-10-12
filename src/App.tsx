@@ -441,10 +441,221 @@ const HomeView: React.FC<{ teams: any[]; matches: any[]; standings: any[]; leagu
 };
 
 // Standings View
+// Generate klasemen image for download
+const generateStandingsImage = (standings: any[], teams: any[], league: any): string => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  const width = 1200;
+  const rowHeight = 60;
+  const headerHeight = 180;
+  const height = headerHeight + (standings.length * rowHeight) + 100;
+  
+  canvas.width = width;
+  canvas.height = height;
+
+  // Background
+  ctx.fillStyle = '#F5FBFC';
+  ctx.fillRect(0, 0, width, height);
+
+  // Header gradient
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, '#087E91');
+  gradient.addColorStop(1, '#16B9C0');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, headerHeight);
+
+  // Logo
+  if (league.logo_url) {
+    const logoImg = new Image();
+    logoImg.src = league.logo_url;
+    try {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(80, 90, 40, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(logoImg, 40, 50, 80, 80);
+      ctx.restore();
+    } catch (e) {
+      ctx.beginPath();
+      ctx.arc(80, 90, 40, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 32px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', 80, 90);
+    }
+  } else {
+    ctx.beginPath();
+    ctx.arc(80, 90, 40, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('S', 80, 90);
+  }
+
+  // Title
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 28px Arial';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('KLASEMEN LIGA PADEL', 140, 80);
+  ctx.font = '16px Arial';
+  ctx.fillText(`${league.name} • Season ${league.season}`, 140, 105);
+  ctx.font = '14px Arial';
+  ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 140, 130);
+
+  // Table header
+  const tableTop = headerHeight + 20;
+  ctx.fillStyle = '#087E91';
+  ctx.fillRect(40, tableTop, width - 80, 40);
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const cols = ['Pos', 'Tim', 'Main', 'Total Poin', 'Menang', 'Kalah', 'Selisih'];
+  const colWidths = [60, 300, 80, 120, 100, 100, 100];
+  let x = 40;
+  cols.forEach((col, i) => {
+    ctx.fillText(col, x + colWidths[i] / 2, tableTop + 20);
+    x += colWidths[i];
+  });
+
+  // Table rows
+  standings.forEach((s, idx) => {
+    const team = teams.find(t => t.id === s.team_id);
+    const y = tableTop + 40 + (idx * rowHeight);
+    
+    // Row background
+    if (idx === 0) {
+      ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
+      ctx.fillRect(40, y, width - 80, rowHeight);
+    } else if (idx % 2 === 0) {
+      ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
+      ctx.fillRect(40, y, width - 80, rowHeight);
+    }
+
+    // Position badge
+    ctx.beginPath();
+    ctx.arc(70, y + rowHeight / 2, 16, 0, Math.PI * 2);
+    ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
+    ctx.fill();
+    ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(idx + 1), 70, y + rowHeight / 2);
+
+    // Team logo or placeholder
+    if (team?.logo_url) {
+      const teamImg = new Image();
+      teamImg.src = team.logo_url;
+      try {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(130, y + rowHeight / 2, 18, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(teamImg, 112, y + rowHeight / 2 - 18, 36, 36);
+        ctx.restore();
+      } catch (e) {
+        ctx.beginPath();
+        ctx.arc(130, y + rowHeight / 2, 18, 0, Math.PI * 2);
+        ctx.fillStyle = '#16B9C0';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(team?.name.charAt(0) || '?', 130, y + rowHeight / 2);
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(130, y + rowHeight / 2, 18, 0, Math.PI * 2);
+      ctx.fillStyle = '#16B9C0';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText(team?.name.charAt(0) || '?', 130, y + rowHeight / 2);
+    }
+
+    // Team name
+    ctx.fillStyle = '#173D4A';
+    ctx.font = '500 13px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(team?.name || 'Unknown', 160, y + rowHeight / 2);
+
+    // Stats
+    ctx.textAlign = 'center';
+    ctx.font = '13px Arial';
+    ctx.fillStyle = '#173D4A';
+    x = 40 + colWidths[0] + colWidths[1];
+    ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
+    x += colWidths[2];
+    ctx.font = 'bold 13px Arial';
+    ctx.fillStyle = '#087E91';
+    ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
+    x += colWidths[3];
+    ctx.font = '13px Arial';
+    ctx.fillStyle = '#2EAD72';
+    ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
+    x += colWidths[4];
+    ctx.fillStyle = '#E65C5C';
+    ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
+    x += colWidths[5];
+    ctx.fillStyle = '#173D4A';
+    ctx.fillText(`${s.pair_difference > 0 ? '+' : ''}${s.pair_difference}`, x + colWidths[6] / 2, y + rowHeight / 2);
+  });
+
+  // Footer
+  const footerY = tableTop + 40 + (standings.length * rowHeight) + 30;
+  ctx.fillStyle = '#718792';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
+  ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 20);
+
+  return canvas.toDataURL('image/png');
+};
+
 const StandingsView: React.FC<{ teams: any[]; standings: any[]; league: any }> = ({ teams, standings, league }) => {
+  const handleDownload = () => {
+    const imageData = generateStandingsImage(standings, teams, league);
+    const link = document.createElement('a');
+    link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
+    link.href = imageData;
+    link.click();
+  };
+
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Klasemen Liga</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: 0 }}>Klasemen Liga</h1>
+        <button
+          onClick={handleDownload}
+          style={{
+            padding: '10px 20px',
+            background: C.primary,
+            color: '#fff',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+        >
+          ⬇ Download Klasemen PNG
+        </button>
+      </div>
       <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'auto' }}>
         <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 700 }}>
           <thead>
