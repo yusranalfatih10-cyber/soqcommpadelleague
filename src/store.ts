@@ -138,8 +138,42 @@ class Store {
 
       this.initialized = true;
       this.notify();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error initializing store:', error);
+      // Fallback data jika Supabase gagal
+      this.league = {
+        id: 'fallback-league',
+        name: 'SOQ.COMM PADEL LEAGUE',
+        logo_url: '',
+        season: '2025',
+        description: 'One League. One Community. One Passion. Kompetisi padel yang mempertemukan komunitas, klub, dan pemain terbaik dalam semangat sportivitas dan persaudaraan.',
+        status: 'ongoing',
+        settings: DEFAULT_SETTINGS,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      this.teams = [
+        { id: 'team-1', name: 'Papua Padel Club', logo_url: '', captain: 'Andi Prasetyo', description: 'Klub padel dari Sorong', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-2', name: 'Sorong Padel United', logo_url: '', captain: 'Budi Santoso', description: 'Klub padel komunitas Sorong', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-3', name: 'Raja Ampat Padel', logo_url: '', captain: 'Carlos Wospakrik', description: 'Klub padel dari Raja Ampat', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-4', name: 'Bird of Paradise', logo_url: '', captain: 'Daniel Inubun', description: 'Klub padel Cendrawasih', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-5', name: 'West Papua Padel', logo_url: '', captain: 'Erik Mambrasar', description: 'Klub padel Papua Barat Daya', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-6', name: 'Cendrawasih Padel FC', logo_url: '', captain: 'Fajar Rumbekas', description: 'Klub padel Cendrawasih FC', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-7', name: 'Pacific Padel Team', logo_url: '', captain: 'Gregory Flassy', description: 'Klub padel Pasifik', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-8', name: 'Coral Reef Padel', logo_url: '', captain: 'Hans Kambuaya', description: 'Klub padel terumbu karang', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+      ];
+      this.users = [{
+        id: 'user-1',
+        name: 'Super Admin',
+        email: 'admin@soqcomm.com',
+        password_hash: btoa('padel2025'),
+        role: 'super_admin',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }];
+      this.initialized = true;
+      this.notify();
     }
   }
 

@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { store } from './store';
-import { Page, Team, Match, Standing, Player, MVP, Matchday, PairMatchResult, Pair } from './types';
-import AdminSettings from './components/AdminSettings';
 
 // Colors
 const C = {
@@ -50,22 +48,68 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; logoUrl?: string }> = ({ size 
 
 // Main App Component
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [currentPage, setCurrentPage] = useState('home');
   const [showAdmin, setShowAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [, setRefresh] = useState(0);
 
   const refresh = () => setRefresh(r => r + 1);
 
   // Initialize store
   useEffect(() => {
-    store.init().then(() => {
-      setLoading(false);
-    }).catch((error: any) => {
-      console.error('Error initializing store:', error);
-      setLoading(false);
-    });
+    const initStore = async () => {
+      try {
+        await store.init();
+        setLoading(false);
+      } catch (err: any) {
+        console.error('Error initializing store:', err);
+        setError(err.message || 'Gagal memuat data');
+        setLoading(false);
+      }
+    };
+    
+    initStore();
   }, []);
+
+  if (error) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: C.bg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}>
+        <div style={{
+          background: C.surface,
+          borderRadius: 12,
+          padding: 24,
+          maxWidth: 400,
+          textAlign: 'center',
+          border: `1px solid ${C.border}`,
+        }}>
+          <h1 style={{ color: C.error, fontSize: 20, marginBottom: 12 }}>Error</h1>
+          <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 16 }}>{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '10px 20px',
+              background: C.primary,
+              color: '#fff',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -79,12 +123,12 @@ export default function App() {
         gap: 16,
       }}>
         <Logo size="lg" />
-        <p style={{ color: C.textSecondary, fontSize: 14 }}>Memuat data...</p>
+        <p style={{ color: C.textSecondary, fontSize: 14 }}>Memuat data dari cloud...</p>
       </div>
     );
   }
 
-  const handleNavigate = (page: Page) => {
+  const handleNavigate = (page: string) => {
     setCurrentPage(page);
     window.scrollTo(0, 0);
   };
@@ -101,7 +145,7 @@ export default function App() {
   const matchdays = store.getMatchdays();
   const mvps = store.getMVPs();
 
-  const navItems: { page: Page; label: string }[] = [
+  const navItems = [
     { page: 'home', label: 'Beranda' },
     { page: 'standings', label: 'Klasemen' },
     { page: 'schedule', label: 'Jadwal' },
@@ -187,7 +231,7 @@ export default function App() {
 }
 
 // Home View
-const HomeView: React.FC<{ teams: Team[]; matches: Match[]; standings: Standing[]; league: any; onNavigate: (page: Page) => void }> = ({ teams, matches, standings, league, onNavigate }) => {
+const HomeView: React.FC<{ teams: any[]; matches: any[]; standings: any[]; league: any; onNavigate: (page: string) => void }> = ({ teams, matches, standings, league, onNavigate }) => {
   const completedMatches = matches.filter(m => m.status === 'completed');
   const upcomingMatches = matches.filter(m => m.status === 'upcoming');
 
@@ -206,7 +250,7 @@ const HomeView: React.FC<{ teams: Team[]; matches: Match[]; standings: Standing[
         <p style={{ color: C.textSecondary, fontSize: 14, margin: '0 0 24px' }}>
           {league.description}
         </p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => onNavigate('standings')} style={{
             padding: '12px 24px',
             background: C.primary,
@@ -260,7 +304,7 @@ const HomeView: React.FC<{ teams: Team[]; matches: Match[]; standings: Standing[
                 </tr>
               </thead>
               <tbody>
-                {standings.slice(0, 5).map((s, idx) => {
+                {standings.slice(0, 5).map((s: any, idx: number) => {
                   const team = teams.find(t => t.id === s.team_id);
                   return (
                     <tr key={s.team_id} style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -281,7 +325,7 @@ const HomeView: React.FC<{ teams: Team[]; matches: Match[]; standings: Standing[
 };
 
 // Standings View
-const StandingsView: React.FC<{ teams: Team[]; standings: Standing[]; league: any }> = ({ teams, standings, league }) => {
+const StandingsView: React.FC<{ teams: any[]; standings: any[]; league: any }> = ({ teams, standings, league }) => {
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Klasemen Liga</h1>
@@ -299,7 +343,7 @@ const StandingsView: React.FC<{ teams: Team[]; standings: Standing[]; league: an
             </tr>
           </thead>
           <tbody>
-            {standings.map((s, idx) => {
+            {standings.map((s: any, idx: number) => {
               const team = teams.find(t => t.id === s.team_id);
               return (
                 <tr key={s.team_id} style={{ borderBottom: `1px solid ${C.border}`, background: idx === 0 ? `${C.accent}15` : 'transparent' }}>
@@ -328,14 +372,13 @@ const StandingsView: React.FC<{ teams: Team[]; standings: Standing[]; league: an
 };
 
 // Schedule View
-const ScheduleView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchday[] }> = ({ teams, matches, matchdays }) => {
+const ScheduleView: React.FC<{ teams: any[]; matches: any[]; matchdays: any[] }> = ({ teams, matches, matchdays }) => {
   const getTeam = (id: string) => teams.find(t => t.id === id);
-  const getMatchday = (id: string) => matchdays.find(md => md.id === id);
 
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Jadwal Pertandingan</h1>
-      {matchdays.map(md => {
+      {matchdays.map((md: any) => {
         const mdMatches = matches.filter(m => m.matchday_id === md.id);
         if (mdMatches.length === 0) return null;
         return (
@@ -344,29 +387,17 @@ const ScheduleView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Match
               {md.name} - {md.date}
             </h3>
             <div style={{ display: 'grid', gap: 10 }}>
-              {mdMatches.map(match => (
+              {mdMatches.map((match: any) => (
                 <div key={match.id} style={{ background: C.surface, borderRadius: 10, padding: 12, border: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontWeight: 600, margin: 0 }}>{getTeam(match.team_a_id)?.name}</p>
-                      <p style={{ fontSize: 11, color: C.textSecondary, margin: '2px 0 0' }}>vs</p>
-                      <p style={{ fontWeight: 600, margin: '2px 0 0' }}>{getTeam(match.team_b_id)?.name}</p>
+                      <p style={{ fontSize: 11, color: C.textSecondary, margin: '2px 0' }}>vs</p>
+                      <p style={{ fontWeight: 600, margin: 0 }}>{getTeam(match.team_b_id)?.name}</p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>Court {match.court}</p>
-                      <p style={{ fontSize: 12, color: C.textSecondary, margin: '2px 0 0' }}>{match.start_time}</p>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        background: match.status === 'completed' ? `${C.success}15` : match.status === 'ongoing' ? `${C.highlight}15` : `${C.secondary}15`,
-                        color: match.status === 'completed' ? C.success : match.status === 'ongoing' ? C.highlight : C.secondary,
-                        marginTop: 4,
-                      }}>
-                        {match.status === 'completed' ? 'Selesai' : match.status === 'ongoing' ? 'Berlangsung' : 'Akan Datang'}
-                      </span>
+                      <p style={{ fontSize: 12, color: C.textSecondary, margin: '2px 0' }}>{match.start_time}</p>
                     </div>
                   </div>
                 </div>
@@ -380,7 +411,7 @@ const ScheduleView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Match
 };
 
 // Results View
-const ResultsView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchday[]; pairResults: PairMatchResult[] }> = ({ teams, matches, matchdays, pairResults }) => {
+const ResultsView: React.FC<{ teams: any[]; matches: any[]; matchdays: any[]; pairResults: any[] }> = ({ teams, matches, matchdays, pairResults }) => {
   const getTeam = (id: string) => teams.find(t => t.id === id);
   const getMatchday = (id: string) => matchdays.find(md => md.id === id);
   const completedMatches = matches.filter(m => m.status === 'completed').reverse();
@@ -392,10 +423,10 @@ const ResultsView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchd
         <p style={{ color: C.textSecondary, textAlign: 'center', padding: 40 }}>Belum ada hasil pertandingan.</p>
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
-          {completedMatches.map(match => {
+          {completedMatches.map((match: any) => {
             const results = pairResults.filter(r => r.match_id === match.id);
-            const aPoints = results.reduce((sum, r) => sum + r.score_team_a, 0);
-            const bPoints = results.reduce((sum, r) => sum + r.score_team_b, 0);
+            const aPoints = results.reduce((sum: number, r: any) => sum + r.score_team_a, 0);
+            const bPoints = results.reduce((sum: number, r: any) => sum + r.score_team_b, 0);
             return (
               <div key={match.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
                 <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 8px' }}>
@@ -428,7 +459,7 @@ const ResultsView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchd
 };
 
 // Teams View
-const TeamsView: React.FC<{ teams: Team[]; standings: Standing[] }> = ({ teams, standings }) => {
+const TeamsView: React.FC<{ teams: any[]; standings: any[] }> = ({ teams, standings }) => {
   const activeTeams = teams.filter(t => t.is_active);
   const getPosition = (teamId: string) => standings.findIndex(s => s.team_id === teamId) + 1;
 
@@ -436,7 +467,7 @@ const TeamsView: React.FC<{ teams: Team[]; standings: Standing[] }> = ({ teams, 
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Tim Peserta</h1>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-        {activeTeams.map(team => {
+        {activeTeams.map((team: any) => {
           const pos = getPosition(team.id);
           return (
             <div key={team.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
@@ -471,7 +502,7 @@ const TeamsView: React.FC<{ teams: Team[]; standings: Standing[] }> = ({ teams, 
 };
 
 // Players View
-const PlayersView: React.FC<{ teams: Team[]; players: Player[] }> = ({ teams, players }) => {
+const PlayersView: React.FC<{ teams: any[]; players: any[] }> = ({ teams, players }) => {
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -510,7 +541,7 @@ const PlayersView: React.FC<{ teams: Team[]; players: Player[] }> = ({ teams, pl
 
       {filteredPlayers.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {filteredPlayers.map(player => {
+          {filteredPlayers.map((player: any) => {
             const team = getTeam(player.team_id);
             return (
               <div key={player.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
@@ -546,7 +577,7 @@ const PlayersView: React.FC<{ teams: Team[]; players: Player[] }> = ({ teams, pl
 };
 
 // MVP View
-const MVPView: React.FC<{ teams: Team[]; players: Player[]; matchdays: Matchday[]; mvps: MVP[] }> = ({ teams, players, matchdays, mvps }) => {
+const MVPView: React.FC<{ teams: any[]; players: any[]; matchdays: any[]; mvps: any[] }> = ({ teams, players, matchdays, mvps }) => {
   const getPlayer = (playerId: string) => players.find(p => p.id === playerId);
   const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
   const getMatchday = (matchdayId: string) => matchdays.find(md => md.id === matchdayId);
@@ -577,7 +608,7 @@ const MVPView: React.FC<{ teams: Team[]; players: Player[]; matchdays: Matchday[
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>🏆 MVP Matchday {matchday.matchday_number}</h3>
                   <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', margin: '4px 0 0' }}>{matchday.date}</p>
                 </div>
-                <div style={{ padding: 20, display: 'flex', gap: 20, alignItems: 'center' }}>
+                <div style={{ padding: 20, display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ width: 120, height: 120, borderRadius: '50%', overflow: 'hidden', border: `4px solid ${C.accent}`, flexShrink: 0 }}>
                     {player?.photo_url ? (
                       <img src={player.photo_url} alt={player?.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -587,7 +618,7 @@ const MVPView: React.FC<{ teams: Team[]; players: Player[]; matchdays: Matchday[
                       </div>
                     )}
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
                     <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>{player?.name || 'Unknown Player'}</h2>
                     {team && <p style={{ fontSize: 14, color: C.textSecondary, margin: '0 0 12px' }}>{team.name}</p>}
                     {mvp.reason && (
@@ -618,16 +649,33 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notification, setNotification] = useState<{ type: string; msg: string } | null>(null);
+
+  const notify = (type: string, msg: string) => {
+    setNotification({ type, msg });
+    setTimeout(() => setNotification(null), 3000);
+    onRefresh();
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = await store.loginUser(email, password);
-    if (user) {
-      setLoggedIn(true);
-      setError('');
-    } else {
-      setError('Email atau password salah');
+    try {
+      const user = await store.loginUser(email, password);
+      if (user) {
+        setLoggedIn(true);
+        setError('');
+      } else {
+        setError('Email atau password salah');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login gagal');
     }
+  };
+
+  const handleLogout = async () => {
+    await store.logoutUser();
+    setLoggedIn(false);
+    onExit();
   };
 
   if (!loggedIn) {
@@ -659,16 +707,26 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg }}>
+      {notification && (
+        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 100, padding: '10px 16px', borderRadius: 8, background: notification.type === 'success' ? C.success : C.error, color: '#fff', fontSize: 13, fontWeight: 500 }}>
+          {notification.msg}
+        </div>
+      )}
       <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Logo size="sm" />
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onExit} style={{ padding: '6px 12px', fontSize: 12, color: C.textSecondary, background: 'none', border: 'none', cursor: 'pointer' }}>Lihat Situs</button>
-          <button onClick={() => { store.logoutUser(); setLoggedIn(false); onExit(); }} style={{ padding: '6px 12px', fontSize: 12, color: C.error, background: `${C.error}10`, borderRadius: 8, border: 'none', cursor: 'pointer' }}>Logout</button>
+          <button onClick={handleLogout} style={{ padding: '6px 12px', fontSize: 12, color: C.error, background: `${C.error}10`, borderRadius: 8, border: 'none', cursor: 'pointer' }}>Logout</button>
         </div>
       </header>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 16 }}>
-        <AdminSettings notify={() => {}} onRefresh={onRefresh} />
+        <React.Suspense fallback={<div style={{ textAlign: 'center', padding: 40, color: C.textSecondary }}>Memuat panel admin...</div>}>
+          <AdminSettingsLazy notify={notify} onRefresh={onRefresh} />
+        </React.Suspense>
       </div>
     </div>
   );
 };
+
+// Lazy load AdminSettings
+const AdminSettingsLazy = React.lazy(() => import('./components/AdminSettings'));
