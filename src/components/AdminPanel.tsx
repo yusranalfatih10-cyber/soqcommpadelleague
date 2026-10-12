@@ -41,6 +41,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onRefresh }) => {
     { id: 'score-management', label: 'Manajemen Skor', icon: '📝', roles: ['super_admin', 'admin'] },
     { id: 'teams', label: 'Manajemen Tim', icon: '👥', roles: ['super_admin', 'admin'] },
     { id: 'players', label: 'Manajemen Pemain', icon: '🏃', roles: ['super_admin', 'admin'] },
+    { id: 'mvp-management', label: 'Manajemen Player MVP', icon: '🏆', roles: ['super_admin', 'admin'] },
     { id: 'users', label: 'Manajemen User', icon: '👤', roles: ['super_admin'] },
     { id: 'schedule', label: 'Manajemen Jadwal', icon: '📅', roles: ['super_admin', 'admin'] },
     { id: 'generate-schedule', label: 'Generate Jadwal', icon: '🔄', roles: ['super_admin', 'admin'] },
@@ -193,6 +194,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onRefresh }) => {
           {activeMenu === 'score-management' && <ScoreManagement notify={notify} />}
           {activeMenu === 'teams' && <TeamsManagement notify={notify} />}
           {activeMenu === 'players' && <PlayersManagement notify={notify} />}
+          {activeMenu === 'mvp-management' && <MVPManagement notify={notify} />}
           {activeMenu === 'users' && <UsersManagement notify={notify} />}
           {activeMenu === 'schedule' && <ScheduleManagement notify={notify} />}
           {activeMenu === 'generate-schedule' && <GenerateSchedule notify={notify} />}
@@ -686,6 +688,23 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
   const [name, setName] = useState('');
   const [captain, setCaptain] = useState('');
   const [desc, setDesc] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        notify('error', 'Ukuran file maksimal 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setLogoUrl(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -695,10 +714,10 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
 
     try {
       if (editingTeam) {
-        await store.updateTeam({ ...editingTeam, name, captain, description: desc });
+        await store.updateTeam({ ...editingTeam, name, captain, description: desc, logo_url: logoUrl });
         notify('success', 'Tim berhasil diperbarui');
       } else {
-        await store.addTeam({ name, captain, description: desc, logo_url: '', is_active: true });
+        await store.addTeam({ name, captain, description: desc, logo_url: logoUrl, is_active: true });
         notify('success', 'Tim baru berhasil ditambahkan');
       }
       setTeams(store.getTeams());
@@ -707,6 +726,7 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
       setName('');
       setCaptain('');
       setDesc('');
+      setLogoUrl('');
     } catch (error) {
       notify('error', 'Gagal menyimpan tim');
     }
@@ -717,6 +737,7 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
     setName(team.name);
     setCaptain(team.captain);
     setDesc(team.description);
+    setLogoUrl(team.logo_url);
     setShowForm(true);
   };
 
@@ -727,7 +748,7 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
           Manajemen Tim
         </h2>
         <button
-          onClick={() => { setShowForm(true); setEditingTeam(null); setName(''); setCaptain(''); setDesc(''); }}
+          onClick={() => { setShowForm(true); setEditingTeam(null); setName(''); setCaptain(''); setDesc(''); setLogoUrl(''); }}
           style={{
             padding: '10px 20px',
             background: C.primary,
@@ -748,6 +769,85 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
           <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
             {editingTeam ? 'Edit Tim' : 'Tambah Tim Baru'}
           </h3>
+          
+          {/* Logo Upload Section */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+              Logo Tim
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {logoUrl ? (
+                <img 
+                  src={logoUrl} 
+                  alt="Logo Tim" 
+                  style={{ 
+                    width: 80, 
+                    height: 80, 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    border: `2px solid ${C.primary}`,
+                  }} 
+                />
+              ) : (
+                <div style={{ 
+                  width: 80, 
+                  height: 80, 
+                  borderRadius: '50%', 
+                  background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 28,
+                }}>
+                  {name ? name.charAt(0) : 'T'}
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
+                <input 
+                  ref={fileInputRef}
+                  type="file" 
+                  accept="image/png,image/jpeg,image/jpg,image/webp" 
+                  onChange={handleLogoSelect} 
+                  style={{ display: 'none' }} 
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: C.bg, 
+                    color: C.textPrimary, 
+                    borderRadius: 6, 
+                    fontSize: 12, 
+                    border: `1px solid ${C.border}`, 
+                    cursor: 'pointer',
+                    marginBottom: 8,
+                  }}
+                >
+                  {logoUrl ? 'Ganti Logo' : 'Pilih Logo'}
+                </button>
+                {logoUrl && (
+                  <button 
+                    onClick={() => setLogoUrl('')}
+                    style={{ 
+                      display: 'block',
+                      padding: '8px 16px', 
+                      background: `${C.error}15`, 
+                      color: C.error, 
+                      borderRadius: 6, 
+                      fontSize: 12, 
+                      border: 'none', 
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Hapus Logo
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
             <input
               value={name}
@@ -807,20 +907,34 @@ const TeamsManagement: React.FC<{ notify: (type: string, msg: string) => void }>
             e.currentTarget.style.boxShadow = 'none';
           }}
           >
-            <div style={{
-              width: 48,
-              height: 48,
-              borderRadius: '50%',
-              background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 18,
-            }}>
-              {team.name.charAt(0)}
-            </div>
+            {team.logo_url ? (
+              <img 
+                src={team.logo_url} 
+                alt={team.name} 
+                style={{ 
+                  width: 48, 
+                  height: 48, 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  border: `2px solid ${C.primary}`,
+                }} 
+              />
+            ) : (
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 18,
+              }}>
+                {team.name.charAt(0)}
+              </div>
+            )}
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>{team.name}</p>
               <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>Kapten: {team.captain}</p>
@@ -855,6 +969,23 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [name, setName] = useState('');
   const [teamId, setTeamId] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        notify('error', 'Ukuran file maksimal 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setPhotoUrl(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim() || !teamId) {
@@ -864,10 +995,10 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
 
     try {
       if (editingPlayer) {
-        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId });
+        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl });
         notify('success', 'Pemain berhasil diperbarui');
       } else {
-        await store.addPlayer({ name, team_id: teamId, photo_url: '', is_active: true });
+        await store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true });
         notify('success', 'Pemain baru berhasil ditambahkan');
       }
       setPlayers(store.getPlayers());
@@ -875,6 +1006,7 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
       setEditingPlayer(null);
       setName('');
       setTeamId('');
+      setPhotoUrl('');
     } catch (error) {
       notify('error', 'Gagal menyimpan pemain');
     }
@@ -884,6 +1016,7 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
     setEditingPlayer(player);
     setName(player.name);
     setTeamId(player.team_id);
+    setPhotoUrl(player.photo_url);
     setShowForm(true);
   };
 
@@ -907,7 +1040,7 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
           Manajemen Pemain
         </h2>
         <button
-          onClick={() => { setShowForm(true); setEditingPlayer(null); setName(''); setTeamId(''); }}
+          onClick={() => { setShowForm(true); setEditingPlayer(null); setName(''); setTeamId(''); setPhotoUrl(''); }}
           style={{
             padding: '10px 20px',
             background: C.primary,
@@ -928,6 +1061,85 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
           <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
             {editingPlayer ? 'Edit Pemain' : 'Tambah Pemain Baru'}
           </h3>
+          
+          {/* Photo Upload Section */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+              Foto Pemain
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {photoUrl ? (
+                <img 
+                  src={photoUrl} 
+                  alt="Foto Pemain" 
+                  style={{ 
+                    width: 80, 
+                    height: 80, 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    border: `2px solid ${C.secondary}`,
+                  }} 
+                />
+              ) : (
+                <div style={{ 
+                  width: 80, 
+                  height: 80, 
+                  borderRadius: '50%', 
+                  background: `${C.secondary}20`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: C.secondary,
+                  fontWeight: 700,
+                  fontSize: 28,
+                }}>
+                  {name ? name.charAt(0) : 'P'}
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
+                <input 
+                  ref={fileInputRef}
+                  type="file" 
+                  accept="image/png,image/jpeg,image/jpg,image/webp" 
+                  onChange={handlePhotoSelect} 
+                  style={{ display: 'none' }} 
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: C.bg, 
+                    color: C.textPrimary, 
+                    borderRadius: 6, 
+                    fontSize: 12, 
+                    border: `1px solid ${C.border}`, 
+                    cursor: 'pointer',
+                    marginBottom: 8,
+                  }}
+                >
+                  {photoUrl ? 'Ganti Foto' : 'Pilih Foto'}
+                </button>
+                {photoUrl && (
+                  <button 
+                    onClick={() => setPhotoUrl('')}
+                    style={{ 
+                      display: 'block',
+                      padding: '8px 16px', 
+                      background: `${C.error}15`, 
+                      color: C.error, 
+                      borderRadius: 6, 
+                      fontSize: 12, 
+                      border: 'none', 
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Hapus Foto
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
             <input
               value={name}
@@ -984,20 +1196,34 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
               e.currentTarget.style.boxShadow = 'none';
             }}
             >
-              <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: '50%',
-                background: `${C.secondary}20`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: C.secondary,
-                fontWeight: 700,
-                fontSize: 18,
-              }}>
-                {player.name.charAt(0)}
-              </div>
+              {player.photo_url ? (
+                <img 
+                  src={player.photo_url} 
+                  alt={player.name} 
+                  style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    border: `2px solid ${C.secondary}`,
+                  }} 
+                />
+              ) : (
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: `${C.secondary}20`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: C.secondary,
+                  fontWeight: 700,
+                  fontSize: 18,
+                }}>
+                  {player.name.charAt(0)}
+                </div>
+              )}
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>{player.name}</p>
                 <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>{team?.name || 'Tidak ada tim'}</p>
@@ -1244,11 +1470,219 @@ const UsersManagement: React.FC<{ notify: (type: string, msg: string) => void }>
   );
 };
 
+// Edit Match Modal Component
+const EditMatchModal: React.FC<{
+  match: Match;
+  teams: Team[];
+  matchdays: Matchday[];
+  onSave: (match: Match) => void;
+  onCancel: () => void;
+  notify: (type: string, msg: string) => void;
+}> = ({ match, teams, matchdays, onSave, onCancel, notify }) => {
+  const [matchdayId, setMatchdayId] = useState(match.matchday_id);
+  const [teamAId, setTeamAId] = useState(match.team_a_id);
+  const [teamBId, setTeamBId] = useState(match.team_b_id);
+  const [court, setCourt] = useState(match.court);
+  const [startTime, setStartTime] = useState(match.start_time);
+  const [endTime, setEndTime] = useState(match.end_time);
+  const [status, setStatus] = useState(match.status);
+
+  const handleSave = () => {
+    if (teamAId === teamBId) {
+      notify('error', 'Tim A dan Tim B tidak boleh sama');
+      return;
+    }
+
+    const updatedMatch: Match = {
+      ...match,
+      matchday_id: matchdayId,
+      team_a_id: teamAId,
+      team_b_id: teamBId,
+      court,
+      start_time: startTime,
+      end_time: endTime,
+      status: status as Match['status'],
+    };
+
+    onSave(updatedMatch);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: 16,
+    }}>
+      <div style={{
+        background: C.surface,
+        borderRadius: 12,
+        padding: 24,
+        maxWidth: 500,
+        width: '100%',
+        maxHeight: '90vh',
+        overflow: 'auto',
+      }}>
+        <h3 style={{ fontSize: 18, fontWeight: 600, color: C.textPrimary, margin: '0 0 20px' }}>
+          Edit Jadwal Pertandingan
+        </h3>
+
+        <div style={{ display: 'grid', gap: 16, marginBottom: 20 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+              Matchday
+            </label>
+            <select
+              value={matchdayId}
+              onChange={e => setMatchdayId(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              {matchdays.map(md => (
+                <option key={md.id} value={md.id}>Matchday {md.matchday_number} - {md.date}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+              Tim A
+            </label>
+            <select
+              value={teamAId}
+              onChange={e => setTeamAId(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              {teams.filter(t => t.is_active).map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+              Tim B
+            </label>
+            <select
+              value={teamBId}
+              onChange={e => setTeamBId(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              {teams.filter(t => t.is_active).map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+                Court
+              </label>
+              <select
+                value={court}
+                onChange={e => setCourt(parseInt(e.target.value))}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              >
+                <option value={1}>Court 1</option>
+                <option value={2}>Court 2</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+                Status
+              </label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value as Match['status'])}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              >
+                <option value="upcoming">Akan Datang</option>
+                <option value="ongoing">Berlangsung</option>
+                <option value="completed">Selesai</option>
+                <option value="cancelled">Dibatalkan</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+                Jam Mulai
+              </label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+                Jam Selesai
+              </label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <button
+            onClick={handleSave}
+            style={{
+              padding: '12px',
+              background: C.success,
+              color: '#fff',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Simpan Perubahan
+          </button>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '12px',
+              background: C.bg,
+              color: C.textSecondary,
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Schedule Management Component
 const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
   const matches = store.getMatches();
   const teams = store.getTeams();
   const matchdays = store.getMatchdays();
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const handleDelete = async (matchId: string) => {
     const match = matches.find(m => m.id === matchId);
@@ -1266,11 +1700,38 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
     }
   };
 
+  const handleEdit = (match: Match) => {
+    setEditingMatch(match);
+    setShowEditForm(true);
+  };
+
+  const handleUpdateMatch = async (updatedMatch: Match) => {
+    try {
+      await store.updateMatch(updatedMatch);
+      notify('success', 'Jadwal berhasil diperbarui');
+      setShowEditForm(false);
+      setEditingMatch(null);
+    } catch (error) {
+      notify('error', 'Gagal memperbarui jadwal');
+    }
+  };
+
   return (
     <div className="fade-in">
       <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: '0 0 24px', fontFamily: 'Montserrat, sans-serif' }}>
         Manajemen Jadwal
       </h2>
+
+      {showEditForm && editingMatch && (
+        <EditMatchModal 
+          match={editingMatch} 
+          teams={teams}
+          matchdays={matchdays}
+          onSave={handleUpdateMatch}
+          onCancel={() => { setShowEditForm(false); setEditingMatch(null); }}
+          notify={notify}
+        />
+      )}
 
       <div style={{ display: 'grid', gap: 16 }}>
         {matchdays.map(md => {
@@ -1313,13 +1774,13 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
                               Court {match.court} • {match.start_time}
                             </p>
                           </div>
-                          {match.status !== 'completed' && (
+                          <div style={{ display: 'flex', gap: 8 }}>
                             <button
-                              onClick={() => handleDelete(match.id)}
+                              onClick={() => handleEdit(match)}
                               style={{
                                 padding: '6px 12px',
-                                background: `${C.error}15`,
-                                color: C.error,
+                                background: `${C.primary}15`,
+                                color: C.primary,
                                 borderRadius: 6,
                                 fontSize: 11,
                                 fontWeight: 500,
@@ -1327,9 +1788,26 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
                                 cursor: 'pointer',
                               }}
                             >
-                              Hapus
+                              Edit
                             </button>
-                          )}
+                            {match.status !== 'completed' && (
+                              <button
+                                onClick={() => handleDelete(match.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  background: `${C.error}15`,
+                                  color: C.error,
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 500,
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Hapus
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -1609,10 +2087,27 @@ const GeneralSettings: React.FC<{ notify: (type: string, msg: string) => void }>
   const [name, setName] = useState(league.name);
   const [season, setSeason] = useState(league.season);
   const [desc, setDesc] = useState(league.description);
+  const [logoUrl, setLogoUrl] = useState(league.logo_url);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        notify('error', 'Ukuran file maksimal 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setLogoUrl(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = async () => {
     try {
-      await store.saveLeague({ ...league, name, season, description: desc });
+      await store.saveLeague({ ...league, name, season, description: desc, logo_url: logoUrl });
       notify('success', 'Pengaturan umum disimpan');
     } catch (error) {
       notify('error', 'Gagal menyimpan pengaturan');
@@ -1626,6 +2121,87 @@ const GeneralSettings: React.FC<{ notify: (type: string, msg: string) => void }>
       </h2>
 
       <div style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}` }}>
+        {/* Logo Liga Section */}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 12 }}>
+            Logo SOQ.COMM PADEL LEAGUE
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+            {logoUrl ? (
+              <img 
+                src={logoUrl} 
+                alt="Logo Liga" 
+                style={{ 
+                  width: 100, 
+                  height: 100, 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  border: `3px solid ${C.primary}`,
+                }} 
+              />
+            ) : (
+              <div style={{ 
+                width: 100, 
+                height: 100, 
+                borderRadius: '50%', 
+                background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 36,
+              }}>
+                S
+              </div>
+            )}
+            <div style={{ flex: 1 }}>
+              <input 
+                ref={fileInputRef}
+                type="file" 
+                accept="image/png,image/jpeg,image/jpg,image/webp" 
+                onChange={handleLogoSelect} 
+                style={{ display: 'none' }} 
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                style={{ 
+                  padding: '10px 20px', 
+                  background: C.primary, 
+                  color: '#fff', 
+                  borderRadius: 8, 
+                  fontSize: 13, 
+                  fontWeight: 600, 
+                  border: 'none', 
+                  cursor: 'pointer',
+                  marginBottom: 8,
+                  width: '100%',
+                }}
+              >
+                {logoUrl ? 'Ganti Logo' : 'Pilih Logo'}
+              </button>
+              {logoUrl && (
+                <button 
+                  onClick={() => setLogoUrl('')}
+                  style={{ 
+                    padding: '10px 20px', 
+                    background: `${C.error}15`, 
+                    color: C.error, 
+                    borderRadius: 8, 
+                    fontSize: 13, 
+                    fontWeight: 600, 
+                    border: 'none', 
+                    cursor: 'pointer',
+                    width: '100%',
+                  }}
+                >
+                  Hapus Logo
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
@@ -1677,6 +2253,348 @@ const GeneralSettings: React.FC<{ notify: (type: string, msg: string) => void }>
           Simpan Pengaturan
         </button>
       </div>
+    </div>
+  );
+};
+
+// MVP Management Component
+const MVPManagement: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
+  const matchdays = store.getMatchdays().filter(md => md.status === 'completed');
+  const players = store.getPlayers().filter(p => p.is_active);
+  const teams = store.getTeams();
+  const mvps = store.getMVPs();
+  
+  const [showForm, setShowForm] = useState(false);
+  const [editingMvp, setEditingMvp] = useState<MVP | null>(null);
+  const [selectedMatchday, setSelectedMatchday] = useState('');
+  const [selectedPlayer, setSelectedPlayer] = useState('');
+  const [reason, setReason] = useState('');
+
+  const getPlayer = (playerId: string) => players.find(p => p.id === playerId);
+  const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
+  const getMatchday = (matchdayId: string) => matchdays.find(md => md.id === matchdayId);
+
+  const handleSave = async () => {
+    if (!selectedMatchday || !selectedPlayer) {
+      notify('error', 'Matchday dan pemain harus dipilih');
+      return;
+    }
+
+    // Check if MVP already exists for this matchday
+    const existingMvp = mvps.find(m => m.matchday_id === selectedMatchday);
+    
+    try {
+      if (editingMvp) {
+        await store.updateMVP({ 
+          ...editingMvp, 
+          matchday_id: selectedMatchday, 
+          player_id: selectedPlayer, 
+          reason 
+        });
+        notify('success', 'MVP berhasil diperbarui');
+      } else {
+        if (existingMvp) {
+          notify('error', 'MVP untuk matchday ini sudah ada. Silakan edit yang existing.');
+          return;
+        }
+        await store.addMVP({ 
+          matchday_id: selectedMatchday, 
+          player_id: selectedPlayer, 
+          reason 
+        });
+        notify('success', 'MVP berhasil ditambahkan');
+      }
+      
+      setShowForm(false);
+      setEditingMvp(null);
+      setSelectedMatchday('');
+      setSelectedPlayer('');
+      setReason('');
+    } catch (error) {
+      console.error('Error saving MVP:', error);
+      notify('error', 'Gagal menyimpan MVP. Silakan coba lagi.');
+    }
+  };
+
+  const handleEdit = (mvp: MVP) => {
+    setEditingMvp(mvp);
+    setSelectedMatchday(mvp.matchday_id);
+    setSelectedPlayer(mvp.player_id);
+    setReason(mvp.reason);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (mvpId: string) => {
+    if (confirm('Yakin ingin menghapus MVP ini?')) {
+      try {
+        await store.deleteMVP(mvpId);
+        notify('success', 'MVP berhasil dihapus');
+      } catch (error) {
+        console.error('Error deleting MVP:', error);
+        notify('error', 'Gagal menghapus MVP. Silakan coba lagi.');
+      }
+    }
+  };
+
+  // Get matchdays that don't have MVP yet
+  const availableMatchdays = matchdays.filter(md => !mvps.some(m => m.matchday_id === md.id));
+
+  return (
+    <div className="fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>
+          Manajemen Player MVP
+        </h2>
+        <button 
+          onClick={() => { setShowForm(true); setEditingMvp(null); setSelectedMatchday(''); setSelectedPlayer(''); setReason(''); }} 
+          disabled={availableMatchdays.length === 0}
+          style={{ 
+            padding: '10px 20px', 
+            background: availableMatchdays.length === 0 ? C.border : C.primary, 
+            color: '#fff', 
+            borderRadius: 8, 
+            fontSize: 13, 
+            fontWeight: 600, 
+            border: 'none', 
+            cursor: availableMatchdays.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: availableMatchdays.length === 0 ? 0.5 : 1,
+          }}
+        >
+          + Tambah Player MVP
+        </button>
+      </div>
+
+      {availableMatchdays.length === 0 && !showForm && (
+        <div style={{ 
+          padding: 16, 
+          background: `${C.accent}15`, 
+          borderRadius: 8, 
+          marginBottom: 24,
+          fontSize: 13,
+          color: C.textSecondary,
+        }}>
+          ✅ Semua matchday yang sudah selesai sudah memiliki MVP
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fade-in" style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
+            {editingMvp ? 'Edit Player MVP' : 'Tambah Player MVP Baru'}
+          </h3>
+          
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Matchday</label>
+            <select 
+              value={selectedMatchday} 
+              onChange={e => setSelectedMatchday(e.target.value)} 
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              <option value="">Pilih matchday</option>
+              {(editingMvp ? matchdays : availableMatchdays).map(md => (
+                <option key={md.id} value={md.id}>Matchday {md.matchday_number} - {md.date}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Pemain</label>
+            <select 
+              value={selectedPlayer} 
+              onChange={e => setSelectedPlayer(e.target.value)} 
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              <option value="">Pilih pemain</option>
+              {players.map(player => {
+                const team = getTeam(player.team_id);
+                return (
+                  <option key={player.id} value={player.id}>
+                    {player.name} {team ? `(${team.name})` : ''}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Alasan (Opsional)</label>
+            <textarea 
+              value={reason} 
+              onChange={e => setReason(e.target.value)} 
+              rows={3}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14, resize: 'vertical' }} 
+              placeholder="Alasan pemilihan MVP..."
+            />
+          </div>
+
+          {/* Preview */}
+          {selectedPlayer && (
+            <div style={{ 
+              padding: 16, 
+              background: C.bg, 
+              borderRadius: 8, 
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+            }}>
+              {(() => {
+                const player = getPlayer(selectedPlayer);
+                if (!player) return null;
+                const team = getTeam(player.team_id);
+                return (
+                  <>
+                    {player.photo_url ? (
+                      <img 
+                        src={player.photo_url} 
+                        alt={player.name} 
+                        style={{ 
+                          width: 80, 
+                          height: 80, 
+                          borderRadius: '50%', 
+                          objectFit: 'cover',
+                          border: `3px solid ${C.accent}`,
+                        }} 
+                      />
+                    ) : (
+                      <div style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: 32,
+                        border: `3px solid ${C.accent}`,
+                      }}>
+                        {player.name.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <p style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                        {player.name}
+                      </p>
+                      {team && (
+                        <p style={{ fontSize: 13, color: C.textSecondary, margin: '4px 0 0' }}>
+                          {team.name}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <button onClick={handleSave} style={{ padding: '12px', background: C.success, color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Simpan</button>
+            <button onClick={() => { setShowForm(false); setEditingMvp(null); }} style={{ padding: '12px', background: C.bg, color: C.textSecondary, borderRadius: 8, fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Batal</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        {mvps.map(mvp => {
+          const player = getPlayer(mvp.player_id);
+          const matchday = getMatchday(mvp.matchday_id);
+          const team = player ? getTeam(player.team_id) : null;
+
+          return (
+            <div key={mvp.id} style={{ 
+              background: C.surface, 
+              borderRadius: 12, 
+              padding: 16, 
+              border: `2px solid ${C.accent}`, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 16,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateX(4px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(168, 216, 46, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateX(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+            >
+              {player?.photo_url ? (
+                <img 
+                  src={player.photo_url} 
+                  alt={player.name} 
+                  style={{ 
+                    width: 60, 
+                    height: 60, 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    border: `3px solid ${C.accent}`,
+                  }} 
+                />
+              ) : (
+                <div style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: '50%',
+                  background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 24,
+                  border: `3px solid ${C.accent}`,
+                }}>
+                  {player?.name.charAt(0) || '?'}
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                  🏆 {player?.name || 'Unknown Player'}
+                </p>
+                <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>
+                  Matchday {matchday?.matchday_number} • {matchday?.date}
+                </p>
+                {team && (
+                  <p style={{ fontSize: 12, color: C.textSecondary, margin: '2px 0 0' }}>
+                    {team.name}
+                  </p>
+                )}
+                {mvp.reason && (
+                  <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0', fontStyle: 'italic' }}>
+                    "{mvp.reason}"
+                  </p>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => handleEdit(mvp)} style={{ padding: '8px 16px', fontSize: 12, color: C.primary, background: `${C.primary}15`, borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 500 }}>Edit</button>
+                <button onClick={() => handleDelete(mvp.id)} style={{ padding: '8px 16px', fontSize: 12, color: C.error, background: `${C.error}15`, borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 500 }}>Hapus</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {mvps.length === 0 && !showForm && (
+        <div style={{ 
+          textAlign: 'center', 
+          padding: 60,
+          background: C.surface,
+          borderRadius: 12,
+          border: `1px solid ${C.border}`,
+        }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>🏆</div>
+          <h3 style={{ fontSize: 18, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>
+            Belum Ada MVP
+          </h3>
+          <p style={{ fontSize: 13, color: C.textSecondary, margin: 0 }}>
+            Klik tombol "Tambah Player MVP" untuk memilih pemain terbaik setiap matchday
+          </p>
+        </div>
+      )}
     </div>
   );
 };

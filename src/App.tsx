@@ -210,7 +210,7 @@ export default function App() {
 
       {/* Main Content */}
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
-        {currentPage === 'home' && <HomeView teams={teams} matches={matches} standings={standings} league={league} onNavigate={handleNavigate} />}
+        {currentPage === 'home' && <HomeView teams={teams} matches={matches} standings={standings} league={league} mvps={store.getMVPs()} players={players} onNavigate={handleNavigate} />}
         {currentPage === 'standings' && <StandingsView teams={teams} standings={standings} league={league} />}
         {currentPage === 'schedule' && <ScheduleView teams={teams} matches={matches} matchdays={matchdays} />}
         {currentPage === 'results' && <ResultsView teams={teams} matches={matches} matchdays={matchdays} pairResults={store.getPairResults()} />}
@@ -231,9 +231,12 @@ export default function App() {
 }
 
 // Home View
-const HomeView: React.FC<{ teams: any[]; matches: any[]; standings: any[]; league: any; onNavigate: (page: string) => void }> = ({ teams, matches, standings, league, onNavigate }) => {
+const HomeView: React.FC<{ teams: any[]; matches: any[]; standings: any[]; league: any; mvps: any[]; players: any[]; onNavigate: (page: string) => void }> = ({ teams, matches, standings, league, mvps, players, onNavigate }) => {
   const completedMatches = matches.filter(m => m.status === 'completed');
   const upcomingMatches = matches.filter(m => m.status === 'upcoming');
+  const latestMvp = mvps.length > 0 ? mvps[0] : null;
+  const mvpPlayer = latestMvp ? players.find((p: any) => p.id === latestMvp.player_id) : null;
+  const mvpTeam = mvpPlayer ? teams.find((t: any) => t.id === mvpPlayer.team_id) : null;
 
   return (
     <div>
@@ -320,6 +323,119 @@ const HomeView: React.FC<{ teams: any[]; matches: any[]; standings: any[]; leagu
           </div>
         </section>
       )}
+
+      {/* Player MVP Section */}
+      <section style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>🏆 PLAYER MVP</h2>
+        {latestMvp && mvpPlayer ? (
+          <div style={{
+            background: `linear-gradient(135deg, ${C.accent}10, ${C.success}10)`,
+            borderRadius: 16,
+            padding: 24,
+            border: `2px solid ${C.accent}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 24,
+            flexWrap: 'wrap',
+          }}>
+            {mvpPlayer.photo_url ? (
+              <img 
+                src={mvpPlayer.photo_url} 
+                alt={mvpPlayer.name} 
+                style={{ 
+                  width: 120, 
+                  height: 120, 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  border: `4px solid ${C.accent}`,
+                  boxShadow: '0 4px 12px rgba(168, 216, 46, 0.3)',
+                }} 
+              />
+            ) : (
+              <div style={{
+                width: 120,
+                height: 120,
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 48,
+                border: `4px solid ${C.accent}`,
+                boxShadow: '0 4px 12px rgba(168, 216, 46, 0.3)',
+              }}>
+                {mvpPlayer.name.charAt(0)}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{
+                display: 'inline-block',
+                padding: '4px 12px',
+                background: C.accent,
+                color: '#fff',
+                borderRadius: 12,
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}>
+                🏆 MOST VALUABLE PLAYER
+              </div>
+              <h3 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>
+                {mvpPlayer.name}
+              </h3>
+              {mvpTeam && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  {mvpTeam.logo_url ? (
+                    <img 
+                      src={mvpTeam.logo_url} 
+                      alt={mvpTeam.name} 
+                      style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} 
+                    />
+                  ) : (
+                    <div style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: 10,
+                    }}>
+                      {mvpTeam.name.charAt(0)}
+                    </div>
+                  )}
+                  <span style={{ fontSize: 14, color: C.textSecondary, fontWeight: 500 }}>
+                    {mvpTeam.name}
+                  </span>
+                </div>
+              )}
+              {latestMvp.reason && (
+                <p style={{ fontSize: 13, color: C.textSecondary, margin: '8px 0 0', fontStyle: 'italic' }}>
+                  "{latestMvp.reason}"
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: C.surface,
+            borderRadius: 12,
+            padding: 40,
+            border: `1px solid ${C.border}`,
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
+            <p style={{ color: C.textSecondary, fontSize: 14, margin: 0 }}>
+              Player MVP akan diumumkan setelah pertandingan berlangsung.
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   );
 };
