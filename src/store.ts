@@ -1,5 +1,5 @@
 import { supabase } from './lib/supabase';
-import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP, PlayerStats } from './types';
+import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP, PlayerStats, MatchLineup } from './types';
 
 const DEFAULT_SETTINGS = {
   teams_count: 8,
@@ -71,12 +71,13 @@ class Store {
   private pairResults: PairMatchResult[] = [];
   private users: User[] = [];
   private mvps: MVP[] = [];
+  private matchLineups: MatchLineup[] = [];
   private initialized = false;
 
   async init() {
     if (this.initialized) return;
     try {
-      const [leagueData, teamsData, playersData, pairsData, matchdaysData, matchesData, resultsData, usersData, mvpsData] = await Promise.all([
+      const [leagueData, teamsData, playersData, pairsData, matchdaysData, matchesData, resultsData, usersData, mvpsData, lineupsData] = await Promise.all([
         supabase.from('leagues').select('*').limit(1).single(),
         supabase.from('teams').select('*').order('name'),
         supabase.from('players').select('*').order('name'),
@@ -86,6 +87,7 @@ class Store {
         supabase.from('pair_match_results').select('*'),
         supabase.from('admin_users').select('*'),
         supabase.from('mvps').select('*'),
+        supabase.from('match_lineups').select('*').order('match_id, party_number'),
       ]);
 
       if (leagueData.data) {
@@ -109,6 +111,7 @@ class Store {
       this.pairResults = resultsData.data || [];
       this.users = usersData.data || [];
       this.mvps = mvpsData.data || [];
+      this.matchLineups = lineupsData.data || [];
 
       if (this.users.length === 0) {
         const { data } = await supabase.from('admin_users').insert([{
@@ -350,10 +353,55 @@ class Store {
   }
   async deleteMatch(matchId: string) {
     await supabase.from('pair_match_results').delete().eq('match_id', matchId);
+    await supabase.from('match_lineups').delete().eq('match_id', matchId);
     const { error } = await supabase.from('matches').delete().eq('id', matchId);
     if (!error) {
       this.matches = this.matches.filter(m => m.id !== matchId);
       this.pairResults = this.pairResults.filter(r => r.match_id !== matchId);
+      this.matchLineups = this.matchLineups.filter(l => l.match_id !== matchId);
+      this.notify();
+    }
+  }
+
+  // Match Lineups CRUD
+  getMatchLineups(): MatchLineup[] { return this.matchLineups; }
+  
+  getMatchLineupsByMatchId(matchId: string): MatchLineup[] {
+    return this.matchLineups.filter(l => l.match_id === matchId).sort((a, b) => a.party_number - b.party_number);
+  }
+
+  async saveMatchLineups(matchId: string, lineups: Omit<MatchLineup, 'id' | 'created_at' | 'updated_at'>[]) {
+    // Validasi matchId
+    if (!matchId || matchId === '') {
+      throw new Error('ID pertandingan tidak valid');
+    }
+
+    // Hapus lineups lama untuk match ini
+    const { error: deleteError } = await supabase.from('match_lineups').delete().eq('match_id', matchId);
+    if (deleteError) {
+      console.error('Error deleting old lineups:', deleteError);
+      throw new Error('Gagal menghapus susunan pemain lama: ' + deleteError.message);
+    }
+
+    // Insert lineups baru
+    if (lineups.length > 0) {
+      const { data, error } = await supabase.from('match_lineups').insert(lineups).select();
+      if (error) {
+        console.error('Error inserting lineups:', error);
+        throw new Error('Gagal menyimpan susunan pemain: ' + error.message);
+      }
+
+      if (data) {
+        // Update local state
+        this.matchLineups = [
+          ...this.matchLineups.filter(l => l.match_id !== matchId),
+          ...data
+        ];
+        this.notify();
+      }
+    } else {
+      // Jika lineups kosong, hanya hapus dari local state
+      this.matchLineups = this.matchLineups.filter(l => l.match_id !== matchId);
       this.notify();
     }
   }

@@ -366,7 +366,9 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
   const matches = store.getMatches();
   const teams = store.getTeams();
   const pairs = store.getPairs();
+  const players = store.getPlayers();
   const [selectedMatch, setSelectedMatch] = useState<string>('');
+  const [selectedParty, setSelectedParty] = useState<number>(1);
   const [scores, setScores] = useState([
     { a: 0, b: 0 },
     { a: 0, b: 0 },
@@ -376,6 +378,18 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
 
   const availableMatches = matches.filter(m => m.status === 'upcoming' || m.status === 'ongoing');
   const match = matches.find(m => m.id === selectedMatch);
+  
+  // Get match lineups
+  const matchLineups = match ? store.getMatchLineupsByMatchId(match.id) : [];
+  
+  // Get player name by ID
+  const getPlayerName = (playerId: string) => {
+    const player = players.find(p => p.id === playerId);
+    return player?.name || 'Pemain tidak ditemukan';
+  };
+  
+  // Get lineup for selected party
+  const currentLineup = matchLineups.find(l => l.party_number === selectedParty);
 
   const handleSave = async (draft: boolean) => {
     if (!match) {
@@ -397,34 +411,51 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
       return;
     }
 
-    // Validasi: pastikan setiap tim memiliki minimal 4 pasangan aktif
-    const teamAPairs = pairs.filter(p => p.team_id === match.team_a_id && p.is_active);
-    const teamBPairs = pairs.filter(p => p.team_id === match.team_b_id && p.is_active);
-
-    if (teamAPairs.length < 4) {
-      notify('error', `Tim A hanya memiliki ${teamAPairs.length} pasangan aktif. Minimal 4 pasangan diperlukan.`);
-      return;
-    }
-
-    if (teamBPairs.length < 4) {
-      notify('error', `Tim B hanya memiliki ${teamBPairs.length} pasangan aktif. Minimal 4 pasangan diperlukan.`);
-      return;
-    }
-
+    // Gunakan match_lineups jika ada, fallback ke pairs
+    const hasLineups = matchLineups.length > 0;
+    
     const results = scores.map((s, idx) => {
-      const teamAPair = teamAPairs[idx];
-      const teamBPair = teamBPairs[idx];
+      let teamAPairId: string | null = null;
+      let teamBPairId: string | null = null;
 
-      // Validasi pasangan ada
-      if (!teamAPair || !teamBPair) {
-        throw new Error(`Pasangan untuk partai ${idx + 1} tidak ditemukan. Silakan periksa data pasangan di Manajemen Pemain.`);
+      if (hasLineups) {
+        // Gunakan data dari match_lineups
+        const lineup = matchLineups.find(l => l.party_number === idx + 1);
+        if (lineup) {
+          // Cari pair yang sesuai dengan pemain di lineup
+          const teamAPair = pairs.find(p => 
+            p.team_id === match.team_a_id && 
+            p.is_active &&
+            ((p.player_1_id === lineup.team_a_player1_id && p.player_2_id === lineup.team_a_player2_id) ||
+             (p.player_1_id === lineup.team_a_player2_id && p.player_2_id === lineup.team_a_player1_id))
+          );
+          const teamBPair = pairs.find(p => 
+            p.team_id === match.team_b_id && 
+            p.is_active &&
+            ((p.player_1_id === lineup.team_b_player1_id && p.player_2_id === lineup.team_b_player2_id) ||
+             (p.player_1_id === lineup.team_b_player2_id && p.player_2_id === lineup.team_b_player1_id))
+          );
+          
+          teamAPairId = teamAPair?.id || null;
+          teamBPairId = teamBPair?.id || null;
+        }
+      } else {
+        // Fallback ke pairs (kompatibilitas dengan data lama)
+        const teamAPairs = pairs.filter(p => p.team_id === match.team_a_id && p.is_active);
+        const teamBPairs = pairs.filter(p => p.team_id === match.team_b_id && p.is_active);
+        
+        const teamAPair = teamAPairs[idx];
+        const teamBPair = teamBPairs[idx];
+        
+        teamAPairId = teamAPair?.id || null;
+        teamBPairId = teamBPair?.id || null;
       }
 
       return {
         match_id: match.id,
         position: idx + 1,
-        team_a_pair_id: teamAPair.id || null,  // Gunakan null jika tidak ada, bukan string kosong
-        team_b_pair_id: teamBPair.id || null,  // Gunakan null jika tidak ada, bukan string kosong
+        team_a_pair_id: teamAPairId,
+        team_b_pair_id: teamBPairId,
         score_team_a: s.a,
         score_team_b: s.b,
         winner_team_id: s.a > s.b ? match.team_a_id : s.b > s.a ? match.team_b_id : null,
@@ -440,6 +471,7 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
         notify('success', 'Hasil berhasil disahkan! Klasemen telah diperbarui.');
       }
       setSelectedMatch('');
+      setSelectedParty(1);
       setScores([{ a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }]);
     } catch (error: any) {
       console.error('Error saving match result:', error);
@@ -491,81 +523,191 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
             {teams.find(t => t.id === match.team_a_id)?.name} vs {teams.find(t => t.id === match.team_b_id)?.name}
           </h3>
 
-          <div style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
-            {scores.map((s, idx) => {
-              const teamAPair = pairs.filter(p => p.team_id === match.team_a_id && p.is_active)[idx];
-              const teamBPair = pairs.filter(p => p.team_id === match.team_b_id && p.is_active)[idx];
-              
-              return (
-              <div key={idx} style={{
-                display: 'grid',
-                gridTemplateColumns: '100px 1fr 80px 80px 1fr 100px',
-                gap: 12,
-                alignItems: 'center',
-                padding: 16,
-                background: C.bg,
-                borderRadius: 8,
-                border: `1px solid ${C.border}`,
-              }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.primaryDark }}>
-                  Partai {idx + 1}
-                </span>
-                <span style={{ fontSize: 13, color: C.textSecondary }}>
-                  {teamAPair ? teamAPair.pair_name : '-'}
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="7"
-                  value={s.a}
-                  onChange={e => {
-                    const newScores = [...scores];
-                    newScores[idx] = { ...newScores[idx], a: parseInt(e.target.value) || 0 };
-                    setScores(newScores);
-                  }}
-                  style={{
-                    padding: '8px',
-                    borderRadius: 6,
-                    border: `1px solid ${C.border}`,
-                    fontSize: 16,
-                    fontWeight: 700,
-                    textAlign: 'center',
-                  }}
-                />
-                <input
-                  type="number"
-                  min="0"
-                  max="7"
-                  value={s.b}
-                  onChange={e => {
-                    const newScores = [...scores];
-                    newScores[idx] = { ...newScores[idx], b: parseInt(e.target.value) || 0 };
-                    setScores(newScores);
-                  }}
-                  style={{
-                    padding: '8px',
-                    borderRadius: 6,
-                    border: `1px solid ${C.border}`,
-                    fontSize: 16,
-                    fontWeight: 700,
-                    textAlign: 'center',
-                  }}
-                />
-                <span style={{ fontSize: 13, color: C.textSecondary, textAlign: 'right' }}>
-                  {teamBPair ? teamBPair.pair_name : '-'}
-                </span>
-                <span style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: s.a > s.b ? C.success : s.b > s.a ? C.error : C.textSecondary,
-                  textAlign: 'right',
-                }}>
-                  {s.a > s.b ? 'A Menang' : s.b > s.a ? 'B Menang' : 'Seri'}
-                </span>
-              </div>
-              );
-            })}
+          {/* Party Selector */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+              Pilih Partai
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {[1, 2, 3, 4].map(party => {
+                const lineup = matchLineups.find(l => l.party_number === party);
+                const hasLineup = lineup && lineup.team_a_player1_id && lineup.team_a_player2_id;
+                return (
+                  <button
+                    key={party}
+                    onClick={() => setSelectedParty(party)}
+                    style={{
+                      padding: '12px',
+                      borderRadius: 8,
+                      border: selectedParty === party ? `2px solid ${C.primary}` : `1px solid ${C.border}`,
+                      background: selectedParty === party ? `${C.primary}15` : C.surface,
+                      color: selectedParty === party ? C.primary : C.textPrimary,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      position: 'relative',
+                    }}
+                  >
+                    Partai {party}
+                    {hasLineup && (
+                      <span style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: C.success,
+                      }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Current Party Display */}
+          <div style={{ 
+            padding: 20, 
+            background: C.bg, 
+            borderRadius: 8, 
+            border: `1px solid ${C.border}`,
+            marginBottom: 24,
+          }}>
+            <h4 style={{ fontSize: 15, fontWeight: 700, color: C.primary, margin: '0 0 16px' }}>
+              Partai {selectedParty}
+            </h4>
+            
+            {currentLineup ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center' }}>
+                {/* Tim A Players */}
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: C.primary, margin: '0 0 8px' }}>
+                    {teams.find(t => t.id === match.team_a_id)?.name}
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: C.textPrimary }}>
+                      {getPlayerName(currentLineup.team_a_player1_id)}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: C.textPrimary }}>
+                      {getPlayerName(currentLineup.team_a_player2_id)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* VS */}
+                <div style={{ 
+                  fontSize: 20, 
+                  fontWeight: 700, 
+                  color: C.textSecondary,
+                  padding: '0 16px',
+                }}>
+                  VS
+                </div>
+
+                {/* Tim B Players */}
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: C.highlight, margin: '0 0 8px' }}>
+                    {teams.find(t => t.id === match.team_b_id)?.name}
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: C.textPrimary }}>
+                      {getPlayerName(currentLineup.team_b_player1_id)}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: C.textPrimary }}>
+                      {getPlayerName(currentLineup.team_b_player2_id)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ 
+                padding: 24, 
+                textAlign: 'center',
+                background: `${C.warning}10`,
+                borderRadius: 8,
+                border: `1px dashed ${C.warning}`,
+              }}>
+                <p style={{ fontSize: 13, color: C.warning, margin: 0, fontWeight: 600 }}>
+                  ⚠️ Susunan pemain untuk Partai {selectedParty} belum diatur
+                </p>
+                <p style={{ fontSize: 12, color: C.textSecondary, margin: '8px 0 0' }}>
+                  Silakan atur susunan pemain di menu Manajemen Jadwal terlebih dahulu
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Score Input */}
+          {currentLineup && (
+            <div style={{ 
+              padding: 20, 
+              background: C.surface, 
+              borderRadius: 8, 
+              border: `2px solid ${C.primary}`,
+              marginBottom: 24,
+            }}>
+              <h4 style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
+                Input Skor Partai {selectedParty}
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <label style={{ display: 'block', fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>
+                    Skor {teams.find(t => t.id === match.team_a_id)?.name}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="7"
+                    value={scores[selectedParty - 1].a}
+                    onChange={e => {
+                      const newScores = [...scores];
+                      newScores[selectedParty - 1] = { ...newScores[selectedParty - 1], a: parseInt(e.target.value) || 0 };
+                      setScores(newScores);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: 8,
+                      border: `2px solid ${C.primary}`,
+                      fontSize: 24,
+                      fontWeight: 700,
+                      textAlign: 'center',
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: C.textSecondary }}>
+                  -
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <label style={{ display: 'block', fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>
+                    Skor {teams.find(t => t.id === match.team_b_id)?.name}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="7"
+                    value={scores[selectedParty - 1].b}
+                    onChange={e => {
+                      const newScores = [...scores];
+                      newScores[selectedParty - 1] = { ...newScores[selectedParty - 1], b: parseInt(e.target.value) || 0 };
+                      setScores(newScores);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: 8,
+                      border: `2px solid ${C.highlight}`,
+                      fontSize: 24,
+                      fontWeight: 700,
+                      textAlign: 'center',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Summary */}
           <div style={{
@@ -1715,10 +1857,11 @@ const EditMatchModal: React.FC<{
   match: Match;
   teams: Team[];
   matchdays: Matchday[];
-  onSave: (match: Match) => void;
+  players: Player[];
+  onSave: (match: Match, lineups?: any[]) => void;
   onCancel: () => void;
   notify: (type: string, msg: string) => void;
-}> = ({ match, teams, matchdays, onSave, onCancel, notify }) => {
+}> = ({ match, teams, matchdays, players, onSave, onCancel, notify }) => {
   const [matchdayId, setMatchdayId] = useState(match.matchday_id);
   const [teamAId, setTeamAId] = useState(match.team_a_id);
   const [teamBId, setTeamBId] = useState(match.team_b_id);
@@ -1726,11 +1869,69 @@ const EditMatchModal: React.FC<{
   const [startTime, setStartTime] = useState(match.start_time);
   const [endTime, setEndTime] = useState(match.end_time);
   const [status, setStatus] = useState(match.status);
+  
+  // Load existing lineups
+  const existingLineups = store.getMatchLineupsByMatchId(match.id);
+  
+  // State for 4 parties lineups
+  const [lineups, setLineups] = useState([
+    existingLineups[0] || { party_number: 1, team_a_player1_id: '', team_a_player2_id: '', team_b_player1_id: '', team_b_player2_id: '' },
+    existingLineups[1] || { party_number: 2, team_a_player1_id: '', team_a_player2_id: '', team_b_player1_id: '', team_b_player2_id: '' },
+    existingLineups[2] || { party_number: 3, team_a_player1_id: '', team_a_player2_id: '', team_b_player1_id: '', team_b_player2_id: '' },
+    existingLineups[3] || { party_number: 4, team_a_player1_id: '', team_a_player2_id: '', team_b_player1_id: '', team_b_player2_id: '' },
+  ]);
+
+  // Get players by team
+  const getTeamPlayers = (teamId: string) => {
+    return players.filter(p => p.team_id === teamId && p.is_active);
+  };
+
+  const teamAPlayers = getTeamPlayers(teamAId);
+  const teamBPlayers = getTeamPlayers(teamBId);
+
+  const updateLineup = (partyIndex: number, field: string, value: string) => {
+    const newLineups = [...lineups];
+    newLineups[partyIndex] = { ...newLineups[partyIndex], [field]: value };
+    setLineups(newLineups);
+  };
 
   const handleSave = () => {
     if (teamAId === teamBId) {
       notify('error', 'Tim A dan Tim B tidak boleh sama');
       return;
+    }
+
+    // Validasi lineups (optional - admin bisa simpan tanpa lineups)
+    const hasAnyLineup = lineups.some(l => 
+      l.team_a_player1_id || l.team_a_player2_id || l.team_b_player1_id || l.team_b_player2_id
+    );
+
+    if (hasAnyLineup) {
+      // Validasi setiap partai yang diisi
+      for (let i = 0; i < lineups.length; i++) {
+        const lineup = lineups[i];
+        const hasAnyPlayer = lineup.team_a_player1_id || lineup.team_a_player2_id || lineup.team_b_player1_id || lineup.team_b_player2_id;
+        
+        if (hasAnyPlayer) {
+          // Validasi lengkap untuk partai ini
+          if (!lineup.team_a_player1_id || !lineup.team_a_player2_id) {
+            notify('error', `Partai ${i + 1}: Lengkapi pemain Tim A`);
+            return;
+          }
+          if (!lineup.team_b_player1_id || !lineup.team_b_player2_id) {
+            notify('error', `Partai ${i + 1}: Lengkapi pemain Tim B`);
+            return;
+          }
+          if (lineup.team_a_player1_id === lineup.team_a_player2_id) {
+            notify('error', `Partai ${i + 1}: Pemain Tim A tidak boleh sama`);
+            return;
+          }
+          if (lineup.team_b_player1_id === lineup.team_b_player2_id) {
+            notify('error', `Partai ${i + 1}: Pemain Tim B tidak boleh sama`);
+            return;
+          }
+        }
+      }
     }
 
     const updatedMatch: Match = {
@@ -1744,7 +1945,20 @@ const EditMatchModal: React.FC<{
       status: status as Match['status'],
     };
 
-    onSave(updatedMatch);
+    // Prepare lineups for saving
+    const lineupsToSave = lineups
+      .filter(l => l.team_a_player1_id && l.team_a_player2_id && l.team_b_player1_id && l.team_b_player2_id)
+      .map(l => ({
+        match_id: match.id,
+        party_number: l.party_number,
+        team_a_player1_id: l.team_a_player1_id,
+        team_a_player2_id: l.team_a_player2_id,
+        team_b_player1_id: l.team_b_player1_id,
+        team_b_player2_id: l.team_b_player2_id,
+        status: 'pending' as const,
+      }));
+
+    onSave(updatedMatch, lineupsToSave);
   };
 
   return (
@@ -1879,6 +2093,149 @@ const EditMatchModal: React.FC<{
           </div>
         </div>
 
+        {/* SUSUNAN PEMAIN PERTANDINGAN */}
+        <div style={{ marginTop: 24, marginBottom: 20 }}>
+          <h4 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', borderBottom: `2px solid ${C.primary}`, paddingBottom: 8 }}>
+            🎾 SUSUNAN PEMAIN PERTANDINGAN
+          </h4>
+          
+          {teamAPlayers.length < 2 || teamBPlayers.length < 2 ? (
+            <div style={{ padding: 16, background: `${C.warning}15`, borderRadius: 8, border: `1px solid ${C.warning}30` }}>
+              <p style={{ fontSize: 13, color: C.warning, margin: 0, fontWeight: 600 }}>
+                ⚠️ Peringatan: Tim harus memiliki minimal 2 pemain aktif untuk mengisi susunan pemain.
+              </p>
+              <p style={{ fontSize: 12, color: C.textSecondary, margin: '8px 0 0' }}>
+                Tim A: {teamAPlayers.length} pemain aktif | Tim B: {teamBPlayers.length} pemain aktif
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 16 }}>
+              {[0, 1, 2, 3].map(partyIndex => (
+                <div key={partyIndex} style={{ 
+                  padding: 16, 
+                  background: C.bg, 
+                  borderRadius: 8, 
+                  border: `1px solid ${C.border}` 
+                }}>
+                  <h5 style={{ 
+                    fontSize: 14, 
+                    fontWeight: 600, 
+                    color: C.primary, 
+                    margin: '0 0 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}>
+                    <span style={{ 
+                      width: 24, 
+                      height: 24, 
+                      borderRadius: '50%', 
+                      background: C.primary, 
+                      color: '#fff',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}>
+                      {partyIndex + 1}
+                    </span>
+                    Partai {partyIndex + 1}
+                  </h5>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {/* Tim A */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.primary, marginBottom: 8 }}>
+                        {teams.find(t => t.id === teamAId)?.name || 'Tim A'}
+                      </label>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={lineups[partyIndex].team_a_player1_id}
+                          onChange={e => updateLineup(partyIndex, 'team_a_player1_id', e.target.value)}
+                          style={{ 
+                            width: '100%', 
+                            padding: '10px', 
+                            borderRadius: 6, 
+                            border: `1px solid ${C.border}`, 
+                            fontSize: 13,
+                            background: C.surface,
+                          }}
+                        >
+                          <option value="">Pilih Pemain 1</option>
+                          {teamAPlayers.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={lineups[partyIndex].team_a_player2_id}
+                          onChange={e => updateLineup(partyIndex, 'team_a_player2_id', e.target.value)}
+                          style={{ 
+                            width: '100%', 
+                            padding: '10px', 
+                            borderRadius: 6, 
+                            border: `1px solid ${C.border}`, 
+                            fontSize: 13,
+                            background: C.surface,
+                          }}
+                        >
+                          <option value="">Pilih Pemain 2</option>
+                          {teamAPlayers.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Tim B */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.highlight, marginBottom: 8 }}>
+                        {teams.find(t => t.id === teamBId)?.name || 'Tim B'}
+                      </label>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={lineups[partyIndex].team_b_player1_id}
+                          onChange={e => updateLineup(partyIndex, 'team_b_player1_id', e.target.value)}
+                          style={{ 
+                            width: '100%', 
+                            padding: '10px', 
+                            borderRadius: 6, 
+                            border: `1px solid ${C.border}`, 
+                            fontSize: 13,
+                            background: C.surface,
+                          }}
+                        >
+                          <option value="">Pilih Pemain 1</option>
+                          {teamBPlayers.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={lineups[partyIndex].team_b_player2_id}
+                          onChange={e => updateLineup(partyIndex, 'team_b_player2_id', e.target.value)}
+                          style={{ 
+                            width: '100%', 
+                            padding: '10px', 
+                            borderRadius: 6, 
+                            border: `1px solid ${C.border}`, 
+                            fontSize: 13,
+                            background: C.surface,
+                          }}
+                        >
+                          <option value="">Pilih Pemain 2</option>
+                          {teamBPlayers.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <button
             onClick={handleSave}
@@ -1921,6 +2278,7 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
   const matches = store.getMatches();
   const teams = store.getTeams();
   const matchdays = store.getMatchdays();
+  const players = store.getPlayers();
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
 
@@ -1945,14 +2303,21 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
     setShowEditForm(true);
   };
 
-  const handleUpdateMatch = async (updatedMatch: Match) => {
+  const handleUpdateMatch = async (updatedMatch: Match, lineups?: any[]) => {
     try {
       await store.updateMatch(updatedMatch);
-      notify('success', 'Jadwal berhasil diperbarui');
+      
+      // Save lineups if provided
+      if (lineups !== undefined) {
+        await store.saveMatchLineups(updatedMatch.id, lineups);
+      }
+      
+      notify('success', 'Jadwal dan susunan pemain berhasil diperbarui');
       setShowEditForm(false);
       setEditingMatch(null);
-    } catch (error) {
-      notify('error', 'Gagal memperbarui jadwal');
+    } catch (error: any) {
+      console.error('Error updating match:', error);
+      notify('error', error.message || 'Gagal memperbarui jadwal');
     }
   };
 
@@ -1967,6 +2332,7 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
           match={editingMatch} 
           teams={teams}
           matchdays={matchdays}
+          players={players}
           onSave={handleUpdateMatch}
           onCancel={() => { setShowEditForm(false); setEditingMatch(null); }}
           notify={notify}

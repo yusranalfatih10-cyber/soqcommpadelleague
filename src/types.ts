@@ -106,6 +106,20 @@ export interface PairMatchResult {
   status: 'pending' | 'completed';
 }
 
+// Match Lineup - Susunan pemain per partai
+export interface MatchLineup {
+  id: string;
+  match_id: string;
+  party_number: number; // 1-4
+  team_a_player1_id: string;
+  team_a_player2_id: string;
+  team_b_player1_id: string;
+  team_b_player2_id: string;
+  status: 'pending' | 'completed';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Standing {
   team_id: string;
   played: number;
