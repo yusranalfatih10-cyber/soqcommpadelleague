@@ -829,9 +829,210 @@ const TeamsView: React.FC<{ teams: any[]; standings: any[] }> = ({ teams, standi
 };
 
 // Players View
+// Player Profile Modal Component
+const PlayerProfileModal: React.FC<{ player: any; team: any; onClose: () => void }> = ({ player, team, onClose }) => {
+  const stats = store.getPlayerStats(player.id);
+
+  return (
+    <div 
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: 20,
+        animation: 'fadeIn 0.3s ease-out',
+      }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.surface,
+          borderRadius: 16,
+          maxWidth: 600,
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        {/* Header dengan foto */}
+        <div style={{
+          background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+          padding: 32,
+          textAlign: 'center',
+          position: 'relative',
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              borderRadius: '50%',
+              width: 32,
+              height: 32,
+              color: '#fff',
+              fontSize: 20,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ×
+          </button>
+          
+          {player.photo_url ? (
+            <img 
+              src={player.photo_url} 
+              alt={player.name} 
+              style={{ 
+                width: 120, 
+                height: 120, 
+                borderRadius: '50%', 
+                objectFit: 'cover',
+                border: '4px solid #fff',
+                marginBottom: 16,
+              }} 
+            />
+          ) : (
+            <div style={{ 
+              width: 120, 
+              height: 120, 
+              borderRadius: '50%', 
+              background: 'rgba(255,255,255,0.2)',
+              border: '4px solid #fff',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: '#fff', 
+              fontWeight: 700, 
+              fontSize: 48,
+              marginBottom: 16,
+            }}>
+              {player.name.charAt(0)}
+            </div>
+          )}
+          
+          <h2 style={{ color: '#fff', fontSize: 24, fontWeight: 700, margin: '0 0 8px' }}>
+            {player.name}
+          </h2>
+          {team && (
+            <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, margin: 0 }}>
+              {team.name}
+            </p>
+          )}
+        </div>
+
+        {/* Info pemain */}
+        <div style={{ padding: 24 }}>
+          {/* Detail Info */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
+            {player.gender && (
+              <div style={{ padding: 12, background: C.bg, borderRadius: 8 }}>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Jenis Kelamin</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                  {player.gender === 'male' ? 'Pria' : 'Wanita'}
+                </p>
+              </div>
+            )}
+            {player.position && (
+              <div style={{ padding: 12, background: C.bg, borderRadius: 8 }}>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Posisi</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                  {player.position === 'right' ? 'Right Side' : player.position === 'left' ? 'Left Side' : 'Both Sides'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Statistik */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>
+              Statistik Pertandingan
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.primary, margin: '0 0 4px' }}>
+                  {stats.totalMatches}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Pertandingan</p>
+              </div>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.success, margin: '0 0 4px' }}>
+                  {stats.totalWins}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Menang</p>
+              </div>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.error, margin: '0 0 4px' }}>
+                  {stats.totalLosses}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Kalah</p>
+              </div>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.accent, margin: '0 0 4px' }}>
+                  {stats.winPercentage}%
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Win Rate</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Keunggulan */}
+          {player.strengths && player.strengths.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>
+                Keunggulan
+              </h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {player.strengths.map((strength: string, idx: number) => (
+                  <span
+                    key={idx}
+                    style={{
+                      padding: '6px 12px',
+                      background: `${C.accent}20`,
+                      color: C.primaryDark,
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: `1px solid ${C.accent}`,
+                    }}
+                  >
+                    {strength}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(!player.strengths || player.strengths.length === 0) && (
+            <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: C.textSecondary, margin: 0 }}>
+                Belum ada data keunggulan pemain
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PlayersView: React.FC<{ teams: any[]; players: any[] }> = ({ teams, players }) => {
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   
   const activePlayers = players.filter(p => p.is_active);
   const filteredPlayers = activePlayers.filter(p => {
@@ -871,7 +1072,26 @@ const PlayersView: React.FC<{ teams: any[]; players: any[] }> = ({ teams, player
           {filteredPlayers.map((player: any) => {
             const team = getTeam(player.team_id);
             return (
-              <div key={player.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+              <div 
+                key={player.id} 
+                onClick={() => setSelectedPlayer(player)}
+                style={{ 
+                  background: C.surface, 
+                  borderRadius: 12, 
+                  border: `1px solid ${C.border}`, 
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 <div style={{ height: 200, background: `linear-gradient(135deg, ${C.primary}20, ${C.primaryDark}20)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {player.photo_url ? (
                     <img src={player.photo_url} alt={player.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -886,9 +1106,16 @@ const PlayersView: React.FC<{ teams: any[]; players: any[] }> = ({ teams, player
                   {team && (
                     <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 8px' }}>{team.name}</p>
                   )}
-                  <span style={{ display: 'inline-block', padding: '4px 12px', background: player.is_active ? `${C.success}15` : `${C.error}15`, color: player.is_active ? C.success : C.error, borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
-                    {player.is_active ? 'Aktif' : 'Nonaktif'}
-                  </span>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-block', padding: '4px 12px', background: player.is_active ? `${C.success}15` : `${C.error}15`, color: player.is_active ? C.success : C.error, borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
+                      {player.is_active ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                    {player.position && (
+                      <span style={{ display: 'inline-block', padding: '4px 12px', background: `${C.primary}15`, color: C.primary, borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
+                        {player.position === 'right' ? 'Right' : player.position === 'left' ? 'Left' : 'Both'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -898,6 +1125,15 @@ const PlayersView: React.FC<{ teams: any[]; players: any[] }> = ({ teams, player
         <div style={{ textAlign: 'center', padding: 60, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
           <p style={{ color: C.textSecondary }}>Tidak ada pemain yang sesuai dengan filter</p>
         </div>
+      )}
+
+      {/* Player Profile Modal */}
+      {selectedPlayer && (
+        <PlayerProfileModal
+          player={selectedPlayer}
+          team={getTeam(selectedPlayer.team_id)}
+          onClose={() => setSelectedPlayer(null)}
+        />
       )}
     </div>
   );

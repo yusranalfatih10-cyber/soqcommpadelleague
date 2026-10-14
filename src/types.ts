@@ -42,8 +42,16 @@ export interface Player {
   photo_url: string;
   is_active: boolean;
   gender?: 'male' | 'female' | '';
-  position?: 'right' | 'left' | '';
+  position?: 'right' | 'left' | 'both' | '';
+  strengths?: string[]; // Keunggulan pemain
   created_at: string;
+}
+
+export interface PlayerStats {
+  totalMatches: number;
+  totalWins: number;
+  totalLosses: number;
+  winPercentage: number;
 }
 
 export interface Pair {

@@ -1,5 +1,5 @@
 import { supabase } from './lib/supabase';
-import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP } from './types';
+import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP, PlayerStats } from './types';
 
 const DEFAULT_SETTINGS = {
   teams_count: 8,
@@ -231,11 +231,63 @@ class Store {
       is_active: player.is_active,
       gender: player.gender || null,
       position: player.position || null,
+      strengths: player.strengths || [],
     }).eq('id', player.id);
     if (!error) { 
       this.players = this.players.map(p => p.id === player.id ? player : p); 
       this.notify(); 
     }
+  }
+
+  // Calculate player statistics from match results
+  getPlayerStats(playerId: string): PlayerStats {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) {
+      return { totalMatches: 0, totalWins: 0, totalLosses: 0, winPercentage: 0 };
+    }
+
+    // Find all pairs that include this player
+    const playerPairs = this.pairs.filter(p => 
+      p.player_1_id === playerId || p.player_2_id === playerId
+    );
+
+    // Find all match results where this player's pairs participated
+    let totalMatches = 0;
+    let totalWins = 0;
+    let totalLosses = 0;
+
+    playerPairs.forEach(pair => {
+      // Find match results for this pair
+      const pairResults = this.pairResults.filter(r => 
+        r.status === 'completed' && 
+        (r.team_a_pair_id === pair.id || r.team_b_pair_id === pair.id)
+      );
+
+      pairResults.forEach(result => {
+        totalMatches++;
+        
+        // Check if this pair won
+        const isTeamA = result.team_a_pair_id === pair.id;
+        const pairWon = isTeamA 
+          ? result.score_team_a > result.score_team_b
+          : result.score_team_b > result.score_team_a;
+
+        if (pairWon) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      });
+    });
+
+    const winPercentage = totalMatches > 0 ? (totalWins / totalMatches) * 100 : 0;
+
+    return {
+      totalMatches,
+      totalWins,
+      totalLosses,
+      winPercentage: Math.round(winPercentage * 100) / 100, // Round to 2 decimals
+    };
   }
 
   // Generate pairs automatically from active players

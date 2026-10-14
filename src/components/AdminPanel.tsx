@@ -1100,7 +1100,9 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
   const [teamId, setTeamId] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | ''>('');
-  const [position, setPosition] = useState<'right' | 'left' | ''>('');
+  const [position, setPosition] = useState<'right' | 'left' | 'both' | ''>('');
+  const [strengths, setStrengths] = useState<string[]>([]);
+  const [newStrength, setNewStrength] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1126,10 +1128,10 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
 
     try {
       if (editingPlayer) {
-        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl, gender, position });
+        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl, gender, position, strengths });
         notify('success', 'Pemain berhasil diperbarui');
       } else {
-        await store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true, gender, position });
+        await store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true, gender, position, strengths });
         notify('success', 'Pemain baru berhasil ditambahkan');
       }
       setPlayers(store.getPlayers());
@@ -1140,6 +1142,8 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
       setPhotoUrl('');
       setGender('');
       setPosition('');
+      setStrengths([]);
+      setNewStrength('');
     } catch (error) {
       notify('error', 'Gagal menyimpan pemain');
     }
@@ -1152,7 +1156,19 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
     setPhotoUrl(player.photo_url);
     setGender(player.gender || '');
     setPosition(player.position || '');
+    setStrengths(player.strengths || []);
     setShowForm(true);
+  };
+
+  const handleAddStrength = () => {
+    if (newStrength.trim() && !strengths.includes(newStrength.trim())) {
+      setStrengths([...strengths, newStrength.trim()]);
+      setNewStrength('');
+    }
+  };
+
+  const handleRemoveStrength = (strength: string) => {
+    setStrengths(strengths.filter(s => s !== strength));
   };
 
   const handleToggleActive = async (playerId: string) => {
@@ -1175,7 +1191,7 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
           Manajemen Pemain
         </h2>
         <button
-          onClick={() => { setShowForm(true); setEditingPlayer(null); setName(''); setTeamId(''); setPhotoUrl(''); setGender(''); setPosition(''); }}
+          onClick={() => { setShowForm(true); setEditingPlayer(null); setName(''); setTeamId(''); setPhotoUrl(''); setGender(''); setPosition(''); setStrengths([]); setNewStrength(''); }}
           style={{
             padding: '10px 20px',
             background: C.primary,
@@ -1301,13 +1317,80 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
             </select>
             <select
               value={position}
-              onChange={e => setPosition(e.target.value as 'right' | 'left' | '')}
+              onChange={e => setPosition(e.target.value as 'right' | 'left' | 'both' | '')}
               style={{ padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
             >
               <option value="">Pilih posisi</option>
               <option value="right">Right Side (Kanan)</option>
               <option value="left">Left Side (Kiri)</option>
+              <option value="both">Both Sides (Kanan & Kiri)</option>
             </select>
+          </div>
+
+          {/* Keunggulan Pemain Section */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
+              Keunggulan Pemain
+            </label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input
+                value={newStrength}
+                onChange={e => setNewStrength(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && handleAddStrength()}
+                placeholder="Contoh: Smash Keras, Bandeja Akurat, dll"
+                style={{ flex: 1, padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              />
+              <button
+                onClick={handleAddStrength}
+                style={{
+                  padding: '12px 20px',
+                  background: C.primary,
+                  color: '#fff',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Tambah
+              </button>
+            </div>
+            {strengths.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {strengths.map((strength, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 12px',
+                      background: `${C.accent}20`,
+                      borderRadius: 20,
+                      border: `1px solid ${C.accent}`,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, color: C.textPrimary }}>{strength}</span>
+                    <button
+                      onClick={() => handleRemoveStrength(strength)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: C.error,
+                        cursor: 'pointer',
+                        fontSize: 16,
+                        fontWeight: 700,
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <button
