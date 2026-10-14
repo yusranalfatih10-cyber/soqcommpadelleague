@@ -1,5 +1,5 @@
 import { supabase } from './lib/supabase';
-import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP, PlayerStats, MatchLineup } from './types';
+import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP, PlayerStats, MatchLineup, MVPMatchday, MVPLiga } from './types';
 
 const DEFAULT_SETTINGS = {
   teams_count: 8,
@@ -71,13 +71,15 @@ class Store {
   private pairResults: PairMatchResult[] = [];
   private users: User[] = [];
   private mvps: MVP[] = [];
+  private mvpsMatchday: MVPMatchday[] = [];
+  private mvpsLiga: MVPLiga[] = [];
   private matchLineups: MatchLineup[] = [];
   private initialized = false;
 
   async init() {
     if (this.initialized) return;
     try {
-      const [leagueData, teamsData, playersData, pairsData, matchdaysData, matchesData, resultsData, usersData, mvpsData, lineupsData] = await Promise.all([
+      const [leagueData, teamsData, playersData, pairsData, matchdaysData, matchesData, resultsData, usersData, mvpsData, mvpsMatchdayData, mvpsLigaData, lineupsData] = await Promise.all([
         supabase.from('leagues').select('*').limit(1).single(),
         supabase.from('teams').select('*').order('name'),
         supabase.from('players').select('*').order('name'),
@@ -87,6 +89,8 @@ class Store {
         supabase.from('pair_match_results').select('*'),
         supabase.from('admin_users').select('*'),
         supabase.from('mvps').select('*'),
+        supabase.from('mvps_matchday').select('*').order('created_at', { ascending: false }),
+        supabase.from('mvps_liga').select('*').order('created_at', { ascending: false }),
         supabase.from('match_lineups').select('*').order('match_id, party_number'),
       ]);
 
@@ -111,6 +115,8 @@ class Store {
       this.pairResults = resultsData.data || [];
       this.users = usersData.data || [];
       this.mvps = mvpsData.data || [];
+      this.mvpsMatchday = mvpsMatchdayData.data || [];
+      this.mvpsLiga = mvpsLigaData.data || [];
       this.matchLineups = lineupsData.data || [];
 
       if (this.users.length === 0) {
@@ -242,54 +248,110 @@ class Store {
     }
   }
 
-  // Calculate player statistics from match results
+  // Calculate player statistics from match results using match_lineups
   getPlayerStats(playerId: string): PlayerStats {
     const player = this.players.find(p => p.id === playerId);
     if (!player) {
-      return { totalMatches: 0, totalWins: 0, totalLosses: 0, winPercentage: 0 };
+      return { 
+        totalMatches: 0, 
+        totalWins: 0, 
+        totalLosses: 0, 
+        winPercentage: 0,
+        mvpMatchdayCount: 0,
+        isMVPLiga: false,
+        matchHistory: []
+      };
     }
 
-    // Find all pairs that include this player
-    const playerPairs = this.pairs.filter(p => 
-      p.player_1_id === playerId || p.player_2_id === playerId
+    // Find all match lineups where this player participated
+    const playerLineups = this.matchLineups.filter(l => 
+      l.team_a_player1_id === playerId || 
+      l.team_a_player2_id === playerId || 
+      l.team_b_player1_id === playerId || 
+      l.team_b_player2_id === playerId
     );
 
-    // Find all match results where this player's pairs participated
     let totalMatches = 0;
     let totalWins = 0;
     let totalLosses = 0;
+    const matchHistory: PlayerStats['matchHistory'] = [];
 
-    playerPairs.forEach(pair => {
-      // Find match results for this pair
-      const pairResults = this.pairResults.filter(r => 
-        r.status === 'completed' && 
-        (r.team_a_pair_id === pair.id || r.team_b_pair_id === pair.id)
+    playerLineups.forEach(lineup => {
+      // Find the match for this lineup
+      const match = this.matches.find(m => m.id === lineup.match_id);
+      if (!match || match.status !== 'completed') return;
+
+      // Find the match result for this party
+      const result = this.pairResults.find(r => 
+        r.match_id === match.id && 
+        r.position === lineup.party_number &&
+        r.status === 'completed'
       );
 
-      pairResults.forEach(result => {
-        totalMatches++;
-        
-        // Check if this pair won
-        const isTeamA = result.team_a_pair_id === pair.id;
-        const pairWon = isTeamA 
-          ? result.score_team_a > result.score_team_b
-          : result.score_team_b > result.score_team_a;
+      if (!result) return;
 
-        if (pairWon) {
-          totalWins++;
-        } else {
-          totalLosses++;
-        }
+      totalMatches++;
+
+      // Determine which team this player is on
+      const isTeamA = lineup.team_a_player1_id === playerId || lineup.team_a_player2_id === playerId;
+      
+      // Find partner
+      const partnerId = isTeamA 
+        ? (lineup.team_a_player1_id === playerId ? lineup.team_a_player2_id : lineup.team_a_player1_id)
+        : (lineup.team_b_player1_id === playerId ? lineup.team_b_player2_id : lineup.team_b_player1_id);
+      
+      const partner = this.players.find(p => p.id === partnerId);
+      const partnerName = partner?.name || 'Unknown';
+
+      // Find opponent team
+      const opponentTeamId = isTeamA ? match.team_b_id : match.team_a_id;
+      const opponentTeam = this.teams.find(t => t.id === opponentTeamId);
+      const opponentName = opponentTeam?.name || 'Unknown';
+
+      // Determine if player's team won this party
+      const playerTeamWon = isTeamA 
+        ? result.score_team_a > result.score_team_b
+        : result.score_team_b > result.score_team_a;
+
+      if (playerTeamWon) {
+        totalWins++;
+      } else {
+        totalLosses++;
+      }
+
+      // Add to match history
+      const matchday = this.matchdays.find(md => md.id === match.matchday_id);
+      matchHistory.push({
+        date: matchday?.date || '',
+        matchday: matchday?.name || '',
+        opponent: opponentName,
+        partyNumber: lineup.party_number,
+        partner: partnerName,
+        score: `${result.score_team_a}-${result.score_team_b}`,
+        result: playerTeamWon ? 'win' : 'loss'
       });
     });
 
     const winPercentage = totalMatches > 0 ? (totalWins / totalMatches) * 100 : 0;
 
+    // Count MVP Matchday
+    const mvpMatchdayCount = this.mvpsMatchday.filter(m => 
+      m.player_id === playerId && m.is_published
+    ).length;
+
+    // Check if player is MVP Liga
+    const isMVPLiga = this.mvpsLiga.some(m => 
+      m.player_id === playerId && m.is_published
+    );
+
     return {
       totalMatches,
       totalWins,
       totalLosses,
-      winPercentage: Math.round(winPercentage * 100) / 100, // Round to 2 decimals
+      winPercentage: Math.round(winPercentage * 100) / 100,
+      mvpMatchdayCount,
+      isMVPLiga,
+      matchHistory: matchHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     };
   }
 
@@ -868,6 +930,125 @@ class Store {
   async deleteMVP(mvpId: string) {
     const { error } = await supabase.from('mvps').delete().eq('id', mvpId);
     if (!error) { this.mvps = this.mvps.filter(m => m.id !== mvpId); this.notify(); }
+  }
+
+  // MVP Matchday CRUD
+  getMVPsMatchday(): MVPMatchday[] { return this.mvpsMatchday; }
+  
+  getMVPsMatchdayByMatch(matchId: string): MVPMatchday[] {
+    return this.mvpsMatchday.filter(m => m.match_id === matchId);
+  }
+  
+  getMVPsMatchdayByMatchday(matchdayId: string): MVPMatchday[] {
+    return this.mvpsMatchday.filter(m => m.matchday_id === matchdayId);
+  }
+  
+  async addMVPMatchday(mvp: Omit<MVPMatchday, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase.from('mvps_matchday').insert([mvp]).select().single();
+    if (error) {
+      console.error('Error adding MVP Matchday:', error);
+      throw new Error('Gagal menambahkan MVP Matchday: ' + error.message);
+    }
+    if (data) {
+      this.mvpsMatchday = [data, ...this.mvpsMatchday];
+      this.notify();
+      return data;
+    }
+    return null;
+  }
+  
+  async updateMVPMatchday(mvp: MVPMatchday) {
+    const { error } = await supabase.from('mvps_matchday').update({
+      season: mvp.season,
+      matchday_id: mvp.matchday_id,
+      match_id: mvp.match_id,
+      party_number: mvp.party_number,
+      player_id: mvp.player_id,
+      notes: mvp.notes,
+      is_published: mvp.is_published,
+      updated_at: new Date().toISOString(),
+    }).eq('id', mvp.id);
+    
+    if (error) {
+      console.error('Error updating MVP Matchday:', error);
+      throw new Error('Gagal mengupdate MVP Matchday: ' + error.message);
+    }
+    
+    this.mvpsMatchday = this.mvpsMatchday.map(m => m.id === mvp.id ? { ...mvp, updated_at: new Date().toISOString() } : m);
+    this.notify();
+  }
+  
+  async deleteMVPMatchday(mvpId: string) {
+    const { error } = await supabase.from('mvps_matchday').delete().eq('id', mvpId);
+    if (error) {
+      console.error('Error deleting MVP Matchday:', error);
+      throw new Error('Gagal menghapus MVP Matchday: ' + error.message);
+    }
+    this.mvpsMatchday = this.mvpsMatchday.filter(m => m.id !== mvpId);
+    this.notify();
+  }
+
+  // MVP Liga CRUD
+  getMVPsLiga(): MVPLiga[] { return this.mvpsLiga; }
+  
+  getMVPLigaBySeason(season: string): MVPLiga | null {
+    return this.mvpsLiga.find(m => m.season === season && m.is_published) || null;
+  }
+  
+  async addMVPLiga(mvp: Omit<MVPLiga, 'id' | 'created_at' | 'updated_at'>) {
+    // Check if there's already a published MVP Liga for this season
+    const existingPublished = this.mvpsLiga.find(m => m.season === mvp.season && m.is_published);
+    if (existingPublished && mvp.is_published) {
+      throw new Error('Sudah ada MVP Liga yang dipublikasikan untuk musim ini. Nonaktifkan yang lama terlebih dahulu.');
+    }
+    
+    const { data, error } = await supabase.from('mvps_liga').insert([mvp]).select().single();
+    if (error) {
+      console.error('Error adding MVP Liga:', error);
+      throw new Error('Gagal menambahkan MVP Liga: ' + error.message);
+    }
+    if (data) {
+      this.mvpsLiga = [data, ...this.mvpsLiga];
+      this.notify();
+      return data;
+    }
+    return null;
+  }
+  
+  async updateMVPLiga(mvp: MVPLiga) {
+    // Check if trying to publish when another is already published
+    if (mvp.is_published) {
+      const existingPublished = this.mvpsLiga.find(m => m.season === mvp.season && m.is_published && m.id !== mvp.id);
+      if (existingPublished) {
+        throw new Error('Sudah ada MVP Liga yang dipublikasikan untuk musim ini. Nonaktifkan yang lama terlebih dahulu.');
+      }
+    }
+    
+    const { error } = await supabase.from('mvps_liga').update({
+      season: mvp.season,
+      player_id: mvp.player_id,
+      notes: mvp.notes,
+      is_published: mvp.is_published,
+      updated_at: new Date().toISOString(),
+    }).eq('id', mvp.id);
+    
+    if (error) {
+      console.error('Error updating MVP Liga:', error);
+      throw new Error('Gagal mengupdate MVP Liga: ' + error.message);
+    }
+    
+    this.mvpsLiga = this.mvpsLiga.map(m => m.id === mvp.id ? { ...mvp, updated_at: new Date().toISOString() } : m);
+    this.notify();
+  }
+  
+  async deleteMVPLiga(mvpId: string) {
+    const { error } = await supabase.from('mvps_liga').delete().eq('id', mvpId);
+    if (error) {
+      console.error('Error deleting MVP Liga:', error);
+      throw new Error('Gagal menghapus MVP Liga: ' + error.message);
+    }
+    this.mvpsLiga = this.mvpsLiga.filter(m => m.id !== mvpId);
+    this.notify();
   }
 
   subscribe(listener: () => void) {

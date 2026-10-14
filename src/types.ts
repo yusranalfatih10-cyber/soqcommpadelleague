@@ -52,6 +52,17 @@ export interface PlayerStats {
   totalWins: number;
   totalLosses: number;
   winPercentage: number;
+  mvpMatchdayCount: number;
+  isMVPLiga: boolean;
+  matchHistory: Array<{
+    date: string;
+    matchday: string;
+    opponent: string;
+    partyNumber: number;
+    partner: string;
+    score: string;
+    result: 'win' | 'loss';
+  }>;
 }
 
 export interface Pair {
@@ -69,6 +80,31 @@ export interface MVP {
   player_id: string;
   reason: string;
   created_at: string;
+}
+
+// MVP Matchday - 4 slot per pertandingan (1 per partai)
+export interface MVPMatchday {
+  id: string;
+  season: string;
+  matchday_id: string;
+  match_id: string;
+  party_number: number; // 1-4
+  player_id: string;
+  notes: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// MVP Liga - 1 per musim
+export interface MVPLiga {
+  id: string;
+  season: string;
+  player_id: string;
+  notes: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Matchday {
