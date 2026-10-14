@@ -1828,23 +1828,82 @@ const ScheduleManagement: React.FC<{ notify: (type: string, msg: string) => void
 
 // Generate Schedule Component
 const GenerateSchedule: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
-  const teams = store.getTeams().filter(t => t.is_active);
+  const allTeams = store.getTeams().filter(t => t.is_active);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(allTeams.map(t => t.id));
   const [startDate, setStartDate] = useState('2025-02-01');
   const [courts, setCourts] = useState(2);
+  const [preview, setPreview] = useState<any>(null);
+  const [replaceExisting, setReplaceExisting] = useState(false);
 
-  const handleGenerate = async () => {
-    if (teams.length < 2) {
-      notify('error', 'Minimal 2 tim aktif diperlukan');
+  const selectedTeams = allTeams.filter(t => selectedTeamIds.includes(t.id));
+  const n = selectedTeams.length;
+  const expectedMatchdays = n % 2 === 1 ? n : n - 1;
+  const expectedMatches = (n * (n - 1)) / 2;
+
+  const handleToggleTeam = (teamId: string) => {
+    setSelectedTeamIds(prev => 
+      prev.includes(teamId) 
+        ? prev.filter(id => id !== teamId)
+        : [...prev, teamId]
+    );
+    setPreview(null); // Reset preview when teams change
+  };
+
+  const handleSelectAll = () => {
+    setSelectedTeamIds(allTeams.map(t => t.id));
+    setPreview(null);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedTeamIds([]);
+    setPreview(null);
+  };
+
+  const handlePreview = () => {
+    if (selectedTeams.length < 2) {
+      notify('error', 'Minimal 2 tim harus dipilih');
       return;
     }
 
-    if (confirm(`Akan membuat jadwal untuk ${teams.length} tim. Lanjutkan?`)) {
-      try {
-        await store.generateSchedule(teams, startDate, courts, false);
-        notify('success', 'Jadwal berhasil dibuat');
-      } catch (error) {
-        notify('error', 'Gagal membuat jadwal');
+    const result = store.previewSchedule(selectedTeams, startDate, courts);
+    setPreview(result);
+  };
+
+  const handleReshuffle = () => {
+    if (selectedTeams.length < 2) {
+      notify('error', 'Minimal 2 tim harus dipilih');
+      return;
+    }
+
+    const result = store.previewSchedule(selectedTeams, startDate, courts);
+    setPreview(result);
+    notify('success', 'Jadwal diacak ulang');
+  };
+
+  const handleSave = async () => {
+    if (!preview || !preview.validation.valid) {
+      notify('error', 'Jadwal tidak valid. Silakan generate ulang.');
+      return;
+    }
+
+    const existingMatches = store.getMatches().filter(m => m.status !== 'completed');
+    if (existingMatches.length > 0 && !replaceExisting) {
+      notify('error', 'Sudah ada jadwal yang belum selesai. Centang opsi "Ganti jadwal yang belum dimainkan" atau batalkan.');
+      return;
+    }
+
+    if (existingMatches.length > 0 && replaceExisting) {
+      if (!confirm(`Akan mengganti ${existingMatches.length} pertandingan yang belum selesai. Lanjutkan?`)) {
+        return;
       }
+    }
+
+    try {
+      await store.generateSchedule(selectedTeams, startDate, courts, replaceExisting);
+      notify('success', `Jadwal berhasil dibuat: ${expectedMatches} pertandingan dalam ${expectedMatchdays} matchday`);
+      setPreview(null);
+    } catch (error: any) {
+      notify('error', error.message || 'Gagal membuat jadwal');
     }
   };
 
@@ -1854,12 +1913,112 @@ const GenerateSchedule: React.FC<{ notify: (type: string, msg: string) => void }
         Generate Jadwal Otomatis
       </h2>
 
-      <div style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}` }}>
-        <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 20px', lineHeight: 1.6 }}>
-          Membuat jadwal round-robin otomatis untuk {teams.length} tim aktif. Setiap tim akan bertemu satu sama lain tepat satu kali.
-        </p>
+      {/* Team Selection */}
+      <div style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+            Pilih Tim Peserta
+          </h3>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleSelectAll}
+              style={{
+                padding: '6px 12px',
+                background: C.bg,
+                color: C.textPrimary,
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                border: `1px solid ${C.border}`,
+                cursor: 'pointer',
+              }}
+            >
+              Pilih Semua
+            </button>
+            <button
+              onClick={handleDeselectAll}
+              style={{
+                padding: '6px 12px',
+                background: C.bg,
+                color: C.textPrimary,
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                border: `1px solid ${C.border}`,
+                cursor: 'pointer',
+              }}
+            >
+              Batal Pilih
+            </button>
+          </div>
+        </div>
 
-        <div style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+          {allTeams.map(team => (
+            <label
+              key={team.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px',
+                background: selectedTeamIds.includes(team.id) ? `${C.primary}10` : C.bg,
+                borderRadius: 8,
+                border: `1px solid ${selectedTeamIds.includes(team.id) ? C.primary : C.border}`,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedTeamIds.includes(team.id)}
+                onChange={() => handleToggleTeam(team.id)}
+                style={{ width: 16, height: 16, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 500, color: C.textPrimary }}>
+                {team.name}
+              </span>
+            </label>
+          ))}
+        </div>
+
+        {/* Summary */}
+        <div style={{ 
+          padding: 16, 
+          background: C.bg, 
+          borderRadius: 8,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 16,
+        }}>
+          <div>
+            <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Tim Dipilih</p>
+            <p style={{ fontSize: 20, fontWeight: 700, color: C.primary, margin: 0 }}>{selectedTeams.length}</p>
+          </div>
+          <div>
+            <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Jumlah Matchday</p>
+            <p style={{ fontSize: 20, fontWeight: 700, color: C.primary, margin: 0 }}>{expectedMatchdays}</p>
+          </div>
+          <div>
+            <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Total Pertandingan</p>
+            <p style={{ fontSize: 20, fontWeight: 700, color: C.primary, margin: 0 }}>{expectedMatches}</p>
+          </div>
+          {n % 2 === 1 && (
+            <div>
+              <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Total Bye</p>
+              <p style={{ fontSize: 20, fontWeight: 700, color: C.warning, margin: 0 }}>{n}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Settings */}
+      <div style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
+          Pengaturan Jadwal
+        </h3>
+
+        <div style={{ display: 'grid', gap: 16, marginBottom: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>
               Tanggal Mulai
@@ -1867,7 +2026,7 @@ const GenerateSchedule: React.FC<{ notify: (type: string, msg: string) => void }
             <input
               type="date"
               value={startDate}
-              onChange={e => setStartDate(e.target.value)}
+              onChange={e => { setStartDate(e.target.value); setPreview(null); }}
               style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
             />
           </div>
@@ -1880,32 +2039,187 @@ const GenerateSchedule: React.FC<{ notify: (type: string, msg: string) => void }
               min="1"
               max="4"
               value={courts}
-              onChange={e => setCourts(parseInt(e.target.value) || 2)}
+              onChange={e => { setCourts(parseInt(e.target.value) || 2); setPreview(null); }}
               style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
             />
           </div>
         </div>
 
         <button
-          onClick={handleGenerate}
+          onClick={handlePreview}
+          disabled={selectedTeams.length < 2}
           style={{
             width: '100%',
             padding: '14px',
-            background: C.primary,
+            background: selectedTeams.length < 2 ? C.border : C.primary,
             color: '#fff',
             borderRadius: 8,
             fontSize: 14,
             fontWeight: 600,
             border: 'none',
-            cursor: 'pointer',
+            cursor: selectedTeams.length < 2 ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
         >
-          Generate Jadwal
+          Generate Preview
         </button>
       </div>
+
+      {/* Preview */}
+      {preview && (
+        <div className="fade-in" style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}`, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+              Preview Jadwal
+            </h3>
+            <button
+              onClick={handleReshuffle}
+              style={{
+                padding: '8px 16px',
+                background: C.secondary,
+                color: '#fff',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              🔄 Acak Ulang
+            </button>
+          </div>
+
+          {/* Validation Status */}
+          <div style={{
+            padding: 12,
+            background: preview.validation.valid ? `${C.success}15` : `${C.error}15`,
+            borderRadius: 8,
+            marginBottom: 16,
+          }}>
+            <p style={{ 
+              fontSize: 13, 
+              fontWeight: 600, 
+              color: preview.validation.valid ? C.success : C.error,
+              margin: 0,
+            }}>
+              {preview.validation.valid ? '✓ Jadwal Valid' : '✗ Jadwal Tidak Valid'}
+            </p>
+            {!preview.validation.valid && (
+              <ul style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: 12, color: C.error }}>
+                {preview.validation.errors.map((error: string, idx: number) => (
+                  <li key={idx}>{error}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Schedule Details */}
+          <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+            {preview.schedule.map((matchday: any) => (
+              <div key={matchday.matchday_number} style={{ marginBottom: 16 }}>
+                <div style={{ 
+                  padding: '10px 12px', 
+                  background: C.bg, 
+                  borderRadius: 8, 
+                  marginBottom: 8,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                    Matchday {matchday.matchday_number} - {matchday.date}
+                  </h4>
+                  {matchday.bye_team && (
+                    <span style={{ 
+                      padding: '4px 8px', 
+                      background: `${C.warning}20`, 
+                      color: C.warning,
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}>
+                      Bye: {matchday.bye_team.name}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {matchday.matches.map((match: any, idx: number) => (
+                    <div key={idx} style={{
+                      padding: '10px 12px',
+                      background: C.surface,
+                      borderRadius: 6,
+                      border: `1px solid ${C.border}`,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: C.textPrimary, margin: 0 }}>
+                          {match.team_a_name} vs {match.team_b_name}
+                        </p>
+                        <p style={{ fontSize: 11, color: C.textSecondary, margin: '2px 0 0' }}>
+                          {match.start_time} - {match.end_time}
+                        </p>
+                      </div>
+                      <span style={{
+                        padding: '4px 8px',
+                        background: `${C.primary}15`,
+                        color: C.primary,
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                      }}>
+                        Court {match.court}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Save Button */}
+          <div style={{ marginTop: 16 }}>
+            {store.getMatches().filter(m => m.status !== 'completed').length > 0 && (
+              <label style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 8, 
+                marginBottom: 12,
+                cursor: 'pointer',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={replaceExisting}
+                  onChange={e => setReplaceExisting(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 12, color: C.textPrimary }}>
+                  Ganti jadwal yang belum dimainkan
+                </span>
+              </label>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={!preview.validation.valid}
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: preview.validation.valid ? C.success : C.border,
+                color: '#fff',
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                border: 'none',
+                cursor: preview.validation.valid ? 'pointer' : 'not-allowed',
+                transition: 'all 0.2s',
+              }}
+            >
+              Simpan Jadwal
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

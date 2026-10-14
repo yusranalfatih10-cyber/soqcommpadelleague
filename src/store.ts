@@ -297,66 +297,236 @@ class Store {
     if (!error) { this.users = this.users.filter(u => u.id !== userId); this.notify(); }
   }
 
-  async generateSchedule(teams: Team[], startDate: string, courts: number, replaceExisting: boolean) {
+  // Generate round-robin schedule with proper algorithm
+  generateRoundRobin(teams: Team[]): { matchdays: any[]; matches: any[]; byeTeams: any[] } {
     const n = teams.length;
-    if (n < 2) return;
+    if (n < 2) return { matchdays: [], matches: [], byeTeams: [] };
 
-    const matchdays: Omit<Matchday, 'id'>[] = [];
-    const matches: Omit<Match, 'id' | 'created_at' | 'updated_at'>[] = [];
-    const numRounds = n - 1;
-
-    // Circle method for round-robin
-    const teamIds = teams.map(t => t.id);
-    if (n % 2 === 1) teamIds.push('BYE');
-
-    const start = new Date(startDate);
-
+    // Shuffle teams for randomization
+    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    const teamIds = shuffledTeams.map(t => t.id);
+    
+    // For odd number of teams, add BYE
+    const hasBye = n % 2 === 1;
+    if (hasBye) {
+      teamIds.push('BYE');
+    }
+    
+    const numTeams = teamIds.length;
+    const numRounds = hasBye ? n : n - 1;
+    const matchesPerRound = Math.floor(numTeams / 2);
+    
+    const matchdays: any[] = [];
+    const matches: any[] = [];
+    const byeTeams: any[] = [];
+    
+    // Circle method algorithm
+    const fixed = teamIds[0]; // First team stays fixed
+    const rotating = teamIds.slice(1); // Rest will rotate
+    
     for (let round = 0; round < numRounds; round++) {
-      const date = new Date(start);
-      date.setDate(date.getDate() + round * 7);
+      const roundMatches: any[] = [];
+      let byeTeam: string | null = null;
       
-      const matchday: Omit<Matchday, 'id'> = {
-        league_id: this.league?.id || '',
-        name: `Matchday ${round + 1}`,
-        matchday_number: round + 1,
-        date: date.toISOString().split('T')[0],
-        status: 'upcoming',
-      };
-      matchdays.push(matchday);
-
-      // Generate pairings for this round
-      const roundFixtures: [string, string][] = [];
-      for (let i = 0; i < Math.floor(n / 2); i++) {
-        const homeIdx = (round + i) % (n - 1);
-        const awayIdx = (n - 1 - i + round) % (n - 1);
-        if (homeIdx !== awayIdx) {
-          roundFixtures.push([teamIds[homeIdx], teamIds[awayIdx]]);
+      // Create pairings for this round
+      const currentRound = [fixed, ...rotating];
+      
+      for (let i = 0; i < matchesPerRound; i++) {
+        const home = currentRound[i];
+        const away = currentRound[numTeams - 1 - i];
+        
+        // Skip BYE matches
+        if (home === 'BYE') {
+          byeTeam = away;
+          continue;
+        }
+        if (away === 'BYE') {
+          byeTeam = home;
+          continue;
+        }
+        
+        // Randomize home/away orientation
+        const swap = Math.random() > 0.5;
+        roundMatches.push({
+          team_a_id: swap ? away : home,
+          team_b_id: swap ? home : away,
+        });
+      }
+      
+      // Shuffle match order within round
+      roundMatches.sort(() => Math.random() - 0.5);
+      
+      matchdays.push({
+        round: round + 1,
+        matches: roundMatches,
+        byeTeam: byeTeam,
+      });
+      
+      if (byeTeam) {
+        byeTeams.push({
+          round: round + 1,
+          teamId: byeTeam,
+        });
+      }
+      
+      // Rotate teams (circle method)
+      if (rotating.length > 1) {
+        const last = rotating.pop()!;
+        rotating.unshift(last);
+      }
+    }
+    
+    return { matchdays, matches, byeTeams };
+  }
+  
+  // Validate generated schedule
+  validateSchedule(teams: Team[], schedule: any[]): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const n = teams.length;
+    const expectedTotalMatches = (n * (n - 1)) / 2;
+    const expectedRounds = n % 2 === 1 ? n : n - 1;
+    
+    // Count total matches
+    let totalMatches = 0;
+    const matchups = new Map<string, number>();
+    const teamMatchCount = new Map<string, number>();
+    const teamByeCount = new Map<string, number>();
+    
+    schedule.forEach((matchday, mdIdx) => {
+      const teamsInRound = new Set<string>();
+      
+      matchday.matches.forEach((match: any) => {
+        totalMatches++;
+        
+        // Check for duplicate matchups
+        const key = [match.team_a_id, match.team_b_id].sort().join('-');
+        matchups.set(key, (matchups.get(key) || 0) + 1);
+        
+        // Count team appearances
+        teamMatchCount.set(match.team_a_id, (teamMatchCount.get(match.team_a_id) || 0) + 1);
+        teamMatchCount.set(match.team_b_id, (teamMatchCount.get(match.team_b_id) || 0) + 1);
+        
+        // Check if team plays twice in same round
+        if (teamsInRound.has(match.team_a_id)) {
+          errors.push(`Tim ${match.team_a_id} bermain dua kali di Matchday ${mdIdx + 1}`);
+        }
+        if (teamsInRound.has(match.team_b_id)) {
+          errors.push(`Tim ${match.team_b_id} bermain dua kali di Matchday ${mdIdx + 1}`);
+        }
+        teamsInRound.add(match.team_a_id);
+        teamsInRound.add(match.team_b_id);
+      });
+      
+      // Track bye
+      if (matchday.byeTeam) {
+        teamByeCount.set(matchday.byeTeam, (teamByeCount.get(matchday.byeTeam) || 0) + 1);
+      }
+    });
+    
+    // Validate total matches
+    if (totalMatches !== expectedTotalMatches) {
+      errors.push(`Total pertandingan tidak sesuai: ${totalMatches} (seharusnya ${expectedTotalMatches})`);
+    }
+    
+    // Validate number of rounds
+    if (schedule.length !== expectedRounds) {
+      errors.push(`Jumlah matchday tidak sesuai: ${schedule.length} (seharusnya ${expectedRounds})`);
+    }
+    
+    // Check for duplicate matchups
+    matchups.forEach((count, key) => {
+      if (count > 1) {
+        errors.push(`Pertandingan ${key} muncul ${count} kali (seharusnya 1)`);
+      }
+    });
+    
+    // Check each team plays correct number of matches
+    teams.forEach(team => {
+      const matchCount = teamMatchCount.get(team.id) || 0;
+      const expectedCount = n - 1;
+      if (matchCount !== expectedCount) {
+        errors.push(`Tim ${team.name} bermain ${matchCount} kali (seharusnya ${expectedCount})`);
+      }
+      
+      // Check bye count for odd number of teams
+      if (n % 2 === 1) {
+        const byeCount = teamByeCount.get(team.id) || 0;
+        if (byeCount !== 1) {
+          errors.push(`Tim ${team.name} mendapat bye ${byeCount} kali (seharusnya 1)`);
         }
       }
-
-      // Assign to courts and time slots
-      roundFixtures.forEach((fixture, idx) => {
-        const court = (idx % courts) + 1;
-        const slot = Math.floor(idx / courts);
+    });
+    
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+  
+  // Preview schedule without saving
+  previewSchedule(teams: Team[], startDate: string, courts: number) {
+    const { matchdays, byeTeams } = this.generateRoundRobin(teams);
+    
+    const start = new Date(startDate);
+    const preview = matchdays.map((md, idx) => {
+      const date = new Date(start);
+      date.setDate(date.getDate() + idx * 7);
+      
+      const matchesWithDetails = md.matches.map((match: any, matchIdx: number) => {
+        const court = (matchIdx % courts) + 1;
+        const slot = Math.floor(matchIdx / courts);
         const startHour = 16 + slot * 2;
         
-        matches.push({
-          matchday_id: '', // Will be set after matchday is created
-          team_a_id: fixture[0],
-          team_b_id: fixture[1],
+        const teamA = teams.find(t => t.id === match.team_a_id);
+        const teamB = teams.find(t => t.id === match.team_b_id);
+        
+        return {
+          ...match,
           court,
           start_time: `${startHour}:00`,
           end_time: `${startHour + 2}:00`,
-          status: 'upcoming',
-          winner_team_id: null,
-        });
+          team_a_name: teamA?.name || 'Unknown',
+          team_b_name: teamB?.name || 'Unknown',
+        };
       });
-
-      // Rotate teams (circle method)
-      const last = teamIds.pop()!;
-      teamIds.splice(1, 0, last);
+      
+      const byeTeam = md.byeTeam ? teams.find(t => t.id === md.byeTeam) : null;
+      
+      return {
+        matchday_number: idx + 1,
+        date: date.toISOString().split('T')[0],
+        matches: matchesWithDetails,
+        bye_team: byeTeam ? { id: byeTeam.id, name: byeTeam.name } : null,
+      };
+    });
+    
+    const validation = this.validateSchedule(teams, matchdays);
+    
+    return {
+      schedule: preview,
+      validation,
+      summary: {
+        total_teams: teams.length,
+        total_matchdays: preview.length,
+        total_matches: preview.reduce((sum, md) => sum + md.matches.length, 0),
+        total_byes: byeTeams.length,
+      },
+    };
+  }
+  
+  // Save generated schedule to database
+  async generateSchedule(teams: Team[], startDate: string, courts: number, replaceExisting: boolean) {
+    const { matchdays, byeTeams } = this.generateRoundRobin(teams);
+    
+    // Validate before saving
+    const validation = this.validateSchedule(teams, matchdays);
+    if (!validation.valid) {
+      console.error('Schedule validation failed:', validation.errors);
+      throw new Error('Jadwal tidak valid: ' + validation.errors.join(', '));
     }
-
+    
+    const start = new Date(startDate);
+    
     if (replaceExisting) {
       // Delete existing upcoming matchdays and matches
       const upcomingMatchdays = this.matchdays.filter(md => md.status !== 'completed');
@@ -370,28 +540,51 @@ class Store {
         return md !== undefined;
       });
     }
-
+    
     // Insert new matchdays and matches
     for (let i = 0; i < matchdays.length; i++) {
-      const { data: mdData } = await supabase.from('matchdays').insert([matchdays[i]]).select().single();
+      const md = matchdays[i];
+      const date = new Date(start);
+      date.setDate(date.getDate() + i * 7);
+      
+      const matchdayData = {
+        league_id: this.league?.id || '',
+        name: `Matchday ${i + 1}`,
+        matchday_number: i + 1,
+        date: date.toISOString().split('T')[0],
+        status: 'upcoming',
+      };
+      
+      const { data: mdData } = await supabase.from('matchdays').insert([matchdayData]).select().single();
       if (mdData) {
         this.matchdays = [...this.matchdays, mdData];
         
         // Insert matches for this matchday
-        const roundMatches = matches.slice(i * Math.floor(n / 2), (i + 1) * Math.floor(n / 2));
-        for (const match of roundMatches) {
-          const { data: matchData } = await supabase.from('matches').insert([{
-            ...match,
-            matchday_id: mdData.id,
-          }]).select().single();
+        for (let j = 0; j < md.matches.length; j++) {
+          const match = md.matches[j];
+          const court = (j % courts) + 1;
+          const slot = Math.floor(j / courts);
+          const startHour = 16 + slot * 2;
           
-          if (matchData) {
-            this.matches = [...this.matches, matchData];
+          const matchData = {
+            matchday_id: mdData.id,
+            team_a_id: match.team_a_id,
+            team_b_id: match.team_b_id,
+            court,
+            start_time: `${startHour}:00`,
+            end_time: `${startHour + 2}:00`,
+            status: 'upcoming',
+            winner_team_id: null,
+          };
+          
+          const { data: matchRecord } = await supabase.from('matches').insert([matchData]).select().single();
+          if (matchRecord) {
+            this.matches = [...this.matches, matchRecord];
           }
         }
       }
     }
-
+    
     this.notify();
   }
 
