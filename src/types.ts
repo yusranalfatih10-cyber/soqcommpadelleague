@@ -88,8 +88,8 @@ export interface PairMatchResult {
   id: string;
   match_id: string;
   position: number;
-  team_a_pair_id: string;
-  team_b_pair_id: string;
+  team_a_pair_id: string | null;
+  team_b_pair_id: string | null;
   score_team_a: number;
   score_team_b: number;
   winner_team_id: string | null;

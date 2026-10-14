@@ -247,6 +247,11 @@ class Store {
 
   getPairResults(): PairMatchResult[] { return this.pairResults; }
   async saveMatchResult(matchId: string, results: Omit<PairMatchResult, 'id'>[], isDraft: boolean = false) {
+    // Validasi matchId
+    if (!matchId || matchId === '') {
+      throw new Error('ID pertandingan tidak valid. Silakan pilih pertandingan kembali.');
+    }
+
     // Validasi: pastikan semua 4 partai memiliki skor jika bukan draft
     if (!isDraft) {
       const hasAllScores = results.every(r => r.score_team_a >= 0 && r.score_team_b >= 0);
@@ -254,6 +259,20 @@ class Store {
         throw new Error('Semua partai harus memiliki skor yang valid');
       }
     }
+
+    // Validasi UUID untuk setiap result
+    results.forEach((r, idx) => {
+      if (!r.match_id || r.match_id === '') {
+        throw new Error(`ID pertandingan tidak valid pada partai ${idx + 1}`);
+      }
+      // team_a_pair_id dan team_b_pair_id boleh null, tapi tidak boleh string kosong
+      if (r.team_a_pair_id === '') {
+        throw new Error(`ID pasangan tim A tidak valid pada partai ${idx + 1}. Silakan periksa data pasangan.`);
+      }
+      if (r.team_b_pair_id === '') {
+        throw new Error(`ID pasangan tim B tidak valid pada partai ${idx + 1}. Silakan periksa data pasangan.`);
+      }
+    });
 
     // Hapus hasil lama untuk match ini
     const { error: deleteError } = await supabase.from('pair_match_results').delete().eq('match_id', matchId);

@@ -378,7 +378,10 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
   const match = matches.find(m => m.id === selectedMatch);
 
   const handleSave = async (draft: boolean) => {
-    if (!match) return;
+    if (!match) {
+      notify('error', 'Pertandingan tidak valid. Silakan pilih pertandingan kembali.');
+      return;
+    }
 
     // Validasi: pastikan semua partai memiliki skor
     const hasAllScores = scores.every(s => s.a >= 0 && s.b >= 0);
@@ -394,16 +397,40 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
       return;
     }
 
-    const results = scores.map((s, idx) => ({
-      match_id: match.id,
-      position: idx + 1,
-      team_a_pair_id: pairs.filter(p => p.team_id === match.team_a_id && p.is_active)[idx]?.id || '',
-      team_b_pair_id: pairs.filter(p => p.team_id === match.team_b_id && p.is_active)[idx]?.id || '',
-      score_team_a: s.a,
-      score_team_b: s.b,
-      winner_team_id: s.a > s.b ? match.team_a_id : s.b > s.a ? match.team_b_id : null,
-      status: draft ? 'pending' as const : 'completed' as const,
-    }));
+    // Validasi: pastikan setiap tim memiliki minimal 4 pasangan aktif
+    const teamAPairs = pairs.filter(p => p.team_id === match.team_a_id && p.is_active);
+    const teamBPairs = pairs.filter(p => p.team_id === match.team_b_id && p.is_active);
+
+    if (teamAPairs.length < 4) {
+      notify('error', `Tim A hanya memiliki ${teamAPairs.length} pasangan aktif. Minimal 4 pasangan diperlukan.`);
+      return;
+    }
+
+    if (teamBPairs.length < 4) {
+      notify('error', `Tim B hanya memiliki ${teamBPairs.length} pasangan aktif. Minimal 4 pasangan diperlukan.`);
+      return;
+    }
+
+    const results = scores.map((s, idx) => {
+      const teamAPair = teamAPairs[idx];
+      const teamBPair = teamBPairs[idx];
+
+      // Validasi pasangan ada
+      if (!teamAPair || !teamBPair) {
+        throw new Error(`Pasangan untuk partai ${idx + 1} tidak ditemukan. Silakan periksa data pasangan di Manajemen Pemain.`);
+      }
+
+      return {
+        match_id: match.id,
+        position: idx + 1,
+        team_a_pair_id: teamAPair.id || null,  // Gunakan null jika tidak ada, bukan string kosong
+        team_b_pair_id: teamBPair.id || null,  // Gunakan null jika tidak ada, bukan string kosong
+        score_team_a: s.a,
+        score_team_b: s.b,
+        winner_team_id: s.a > s.b ? match.team_a_id : s.b > s.a ? match.team_b_id : null,
+        status: draft ? 'pending' as const : 'completed' as const,
+      };
+    });
 
     try {
       await store.saveMatchResult(match.id, results, draft);
