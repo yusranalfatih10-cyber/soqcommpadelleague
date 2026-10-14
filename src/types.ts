@@ -41,6 +41,8 @@ export interface Player {
   name: string;
   photo_url: string;
   is_active: boolean;
+  gender?: 'male' | 'female' | '';
+  position?: 'right' | 'left' | '';
   created_at: string;
 }
 

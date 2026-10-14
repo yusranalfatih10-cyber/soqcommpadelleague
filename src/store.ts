@@ -136,6 +136,11 @@ class Store {
         if (data) this.teams = data;
       }
 
+      // Auto-generate pairs from players if pairs table is empty
+      if (this.pairs.length === 0 && this.players.length > 0) {
+        await this.generatePairsFromPlayers();
+      }
+
       this.initialized = true;
       this.notify();
     } catch (error: any) {
@@ -209,14 +214,70 @@ class Store {
   getPlayers(): Player[] { return this.players; }
   async addPlayer(player: Omit<Player, 'id' | 'created_at'>) {
     const { data, error } = await supabase.from('players').insert([player]).select().single();
-    if (!error && data) { this.players = [...this.players, data]; this.notify(); return data; }
+    if (!error && data) { 
+      this.players = [...this.players, data]; 
+      // Auto-generate pairs after adding player
+      await this.generatePairsFromPlayers();
+      this.notify(); 
+      return data; 
+    }
     return null;
   }
   async updatePlayer(player: Player) {
     const { error } = await supabase.from('players').update({
-      name: player.name, team_id: player.team_id, photo_url: player.photo_url, is_active: player.is_active,
+      name: player.name, 
+      team_id: player.team_id, 
+      photo_url: player.photo_url, 
+      is_active: player.is_active,
+      gender: player.gender || null,
+      position: player.position || null,
     }).eq('id', player.id);
-    if (!error) { this.players = this.players.map(p => p.id === player.id ? player : p); this.notify(); }
+    if (!error) { 
+      this.players = this.players.map(p => p.id === player.id ? player : p); 
+      this.notify(); 
+    }
+  }
+
+  // Generate pairs automatically from active players
+  async generatePairsFromPlayers() {
+    const activePlayers = this.players.filter(p => p.is_active);
+    const teams = this.teams.filter(t => t.is_active);
+    
+    // Clear existing pairs
+    await supabase.from('pairs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    
+    const newPairs: any[] = [];
+    
+    // For each team, create pairs from active players
+    for (const team of teams) {
+      const teamPlayers = activePlayers.filter(p => p.team_id === team.id);
+      
+      // Create pairs (2 players per pair)
+      for (let i = 0; i < teamPlayers.length - 1; i += 2) {
+        const player1 = teamPlayers[i];
+        const player2 = teamPlayers[i + 1];
+        
+        if (player1 && player2) {
+          newPairs.push({
+            team_id: team.id,
+            player_1_id: player1.id,
+            player_2_id: player2.id,
+            pair_name: `${player1.name} & ${player2.name}`,
+            is_active: true,
+          });
+        }
+      }
+    }
+    
+    // Insert new pairs
+    if (newPairs.length > 0) {
+      const { data, error } = await supabase.from('pairs').insert(newPairs).select();
+      if (!error && data) {
+        this.pairs = data;
+      }
+    } else {
+      this.pairs = [];
+    }
   }
 
   getPairs(): Pair[] { return this.pairs; }

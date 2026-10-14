@@ -487,12 +487,16 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
 
       {selectedMatch && match && (
         <div className="fade-in" style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}` }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 20px', textAlign: 'center' }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 20px', textAlign: 'center' }}>
             {teams.find(t => t.id === match.team_a_id)?.name} vs {teams.find(t => t.id === match.team_b_id)?.name}
           </h3>
 
           <div style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
-            {scores.map((s, idx) => (
+            {scores.map((s, idx) => {
+              const teamAPair = pairs.filter(p => p.team_id === match.team_a_id && p.is_active)[idx];
+              const teamBPair = pairs.filter(p => p.team_id === match.team_b_id && p.is_active)[idx];
+              
+              return (
               <div key={idx} style={{
                 display: 'grid',
                 gridTemplateColumns: '100px 1fr 80px 80px 1fr 100px',
@@ -507,7 +511,7 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
                   Partai {idx + 1}
                 </span>
                 <span style={{ fontSize: 13, color: C.textSecondary }}>
-                  Pasangan A{idx + 1}
+                  {teamAPair ? teamAPair.pair_name : '-'}
                 </span>
                 <input
                   type="number"
@@ -548,7 +552,7 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
                   }}
                 />
                 <span style={{ fontSize: 13, color: C.textSecondary, textAlign: 'right' }}>
-                  Pasangan B{idx + 1}
+                  {teamBPair ? teamBPair.pair_name : '-'}
                 </span>
                 <span style={{
                   fontSize: 12,
@@ -559,7 +563,8 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
                   {s.a > s.b ? 'A Menang' : s.b > s.a ? 'B Menang' : 'Seri'}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Summary */}
@@ -1094,6 +1099,8 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
   const [name, setName] = useState('');
   const [teamId, setTeamId] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | ''>('');
+  const [position, setPosition] = useState<'right' | 'left' | ''>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1119,10 +1126,10 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
 
     try {
       if (editingPlayer) {
-        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl });
+        await store.updatePlayer({ ...editingPlayer, name, team_id: teamId, photo_url: photoUrl, gender, position });
         notify('success', 'Pemain berhasil diperbarui');
       } else {
-        await store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true });
+        await store.addPlayer({ name, team_id: teamId, photo_url: photoUrl, is_active: true, gender, position });
         notify('success', 'Pemain baru berhasil ditambahkan');
       }
       setPlayers(store.getPlayers());
@@ -1131,6 +1138,8 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
       setName('');
       setTeamId('');
       setPhotoUrl('');
+      setGender('');
+      setPosition('');
     } catch (error) {
       notify('error', 'Gagal menyimpan pemain');
     }
@@ -1141,6 +1150,8 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
     setName(player.name);
     setTeamId(player.team_id);
     setPhotoUrl(player.photo_url);
+    setGender(player.gender || '');
+    setPosition(player.position || '');
     setShowForm(true);
   };
 
@@ -1164,7 +1175,7 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
           Manajemen Pemain
         </h2>
         <button
-          onClick={() => { setShowForm(true); setEditingPlayer(null); setName(''); setTeamId(''); setPhotoUrl(''); }}
+          onClick={() => { setShowForm(true); setEditingPlayer(null); setName(''); setTeamId(''); setPhotoUrl(''); setGender(''); setPosition(''); }}
           style={{
             padding: '10px 20px',
             background: C.primary,
@@ -1279,6 +1290,24 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
               <option value="">Pilih tim</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
+            <select
+              value={gender}
+              onChange={e => setGender(e.target.value as 'male' | 'female' | '')}
+              style={{ padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              <option value="">Pilih jenis kelamin</option>
+              <option value="male">Pria</option>
+              <option value="female">Wanita</option>
+            </select>
+            <select
+              value={position}
+              onChange={e => setPosition(e.target.value as 'right' | 'left' | '')}
+              style={{ padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+            >
+              <option value="">Pilih posisi</option>
+              <option value="right">Right Side (Kanan)</option>
+              <option value="left">Left Side (Kiri)</option>
+            </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <button
@@ -1350,7 +1379,11 @@ const PlayersManagement: React.FC<{ notify: (type: string, msg: string) => void 
               )}
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>{player.name}</p>
-                <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>{team?.name || 'Tidak ada tim'}</p>
+                <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>
+                  {team?.name || 'Tidak ada tim'}
+                  {player.gender && ` • ${player.gender === 'male' ? 'Pria' : 'Wanita'}`}
+                  {player.position && ` • ${player.position === 'right' ? 'Right Side' : 'Left Side'}`}
+                </p>
               </div>
               <button
                 onClick={() => handleEdit(player)}
