@@ -246,19 +246,72 @@ class Store {
   }
 
   getPairResults(): PairMatchResult[] { return this.pairResults; }
-  async saveMatchResult(matchId: string, results: Omit<PairMatchResult, 'id'>[]) {
-    await supabase.from('pair_match_results').delete().eq('match_id', matchId);
+  async saveMatchResult(matchId: string, results: Omit<PairMatchResult, 'id'>[], isDraft: boolean = false) {
+    // Validasi: pastikan semua 4 partai memiliki skor jika bukan draft
+    if (!isDraft) {
+      const hasAllScores = results.every(r => r.score_team_a >= 0 && r.score_team_b >= 0);
+      if (!hasAllScores) {
+        throw new Error('Semua partai harus memiliki skor yang valid');
+      }
+    }
+
+    // Hapus hasil lama untuk match ini
+    const { error: deleteError } = await supabase.from('pair_match_results').delete().eq('match_id', matchId);
+    if (deleteError) {
+      console.error('Error deleting old results:', deleteError);
+      throw new Error('Gagal menghapus hasil lama: ' + deleteError.message);
+    }
+
+    // Insert hasil baru
     const { data, error } = await supabase.from('pair_match_results').insert(results).select();
-    if (!error && data) {
+    if (error) {
+      console.error('Error inserting results:', error);
+      throw new Error('Gagal menyimpan hasil: ' + error.message);
+    }
+
+    if (data) {
+      // Update local state
       this.pairResults = [...this.pairResults.filter(r => r.match_id !== matchId), ...data];
+      
       const match = this.matches.find(m => m.id === matchId);
       if (match) {
+        // Hitung total poin
         let aPoints = 0, bPoints = 0;
-        results.forEach(r => { aPoints += r.score_team_a; bPoints += r.score_team_b; });
-        match.winner_team_id = aPoints > bPoints ? match.team_a_id : bPoints > aPoints ? match.team_b_id : null;
-        match.status = 'completed';
-        await this.updateMatch(match);
+        results.forEach(r => { 
+          aPoints += r.score_team_a; 
+          bPoints += r.score_team_b; 
+        });
+
+        // Update match berdasarkan status draft atau finalized
+        if (isDraft) {
+          // Draft: match tetap ongoing, results status pending
+          match.status = 'ongoing';
+          match.winner_team_id = null;
+        } else {
+          // Finalized: match completed, results completed
+          match.status = 'completed';
+          match.winner_team_id = aPoints > bPoints ? match.team_a_id : bPoints > aPoints ? match.team_b_id : null;
+        }
+
+        // Simpan update match ke database
+        const { error: updateError } = await supabase
+          .from('matches')
+          .update({
+            status: match.status,
+            winner_team_id: match.winner_team_id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', match.id);
+
+        if (updateError) {
+          console.error('Error updating match:', updateError);
+          throw new Error('Gagal update status match: ' + updateError.message);
+        }
+
+        // Update local matches array
+        this.matches = this.matches.map(m => m.id === match.id ? { ...match, updated_at: new Date().toISOString() } : m);
       }
+
       this.notify();
     }
   }

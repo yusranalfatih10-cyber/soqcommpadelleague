@@ -380,6 +380,20 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
   const handleSave = async (draft: boolean) => {
     if (!match) return;
 
+    // Validasi: pastikan semua partai memiliki skor
+    const hasAllScores = scores.every(s => s.a >= 0 && s.b >= 0);
+    if (!hasAllScores) {
+      notify('error', 'Semua partai harus memiliki skor');
+      return;
+    }
+
+    // Validasi: pastikan tidak ada skor yang sama (tidak ada seri di padel)
+    const hasTie = scores.some(s => s.a === s.b);
+    if (hasTie && !draft) {
+      notify('error', 'Tidak boleh ada skor seri dalam padel');
+      return;
+    }
+
     const results = scores.map((s, idx) => ({
       match_id: match.id,
       position: idx + 1,
@@ -392,12 +406,17 @@ const InputScore: React.FC<{ notify: (type: string, msg: string) => void }> = ({
     }));
 
     try {
-      await store.saveMatchResult(match.id, results);
-      notify('success', draft ? 'Draft disimpan' : 'Hasil disahkan!');
+      await store.saveMatchResult(match.id, results, draft);
+      if (draft) {
+        notify('success', 'Draft berhasil disimpan. Skor belum masuk klasemen.');
+      } else {
+        notify('success', 'Hasil berhasil disahkan! Klasemen telah diperbarui.');
+      }
       setSelectedMatch('');
       setScores([{ a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }]);
-    } catch (error) {
-      notify('error', 'Gagal menyimpan hasil');
+    } catch (error: any) {
+      console.error('Error saving match result:', error);
+      notify('error', error.message || 'Gagal menyimpan hasil. Silakan coba lagi.');
     }
   };
 
@@ -592,8 +611,19 @@ const ScoreManagement: React.FC<{ notify: (type: string, msg: string) => void }>
   const matches = store.getMatches();
   const teams = store.getTeams();
   const pairResults = store.getPairResults();
+  const [filter, setFilter] = useState<'all' | 'completed' | 'draft' | 'cancelled'>('all');
 
-  const completedMatches = matches.filter(m => m.status === 'completed');
+  // Tampilkan semua match yang memiliki hasil (baik draft maupun finalized)
+  const matchesWithResults = matches.filter(m => {
+    const hasResults = pairResults.some(r => r.match_id === m.id);
+    if (!hasResults) return false;
+    
+    if (filter === 'all') return true;
+    if (filter === 'completed') return m.status === 'completed';
+    if (filter === 'draft') return m.status === 'ongoing' || m.status === 'upcoming';
+    if (filter === 'cancelled') return m.status === 'cancelled';
+    return true;
+  });
 
   const handleDeactivate = async (matchId: string) => {
     if (confirm('Yakin ingin menonaktifkan hasil pertandingan ini? Hasil tidak akan dihitung dalam klasemen.')) {
@@ -609,72 +639,139 @@ const ScoreManagement: React.FC<{ notify: (type: string, msg: string) => void }>
     }
   };
 
+  const handleReactivate = async (matchId: string) => {
+    if (confirm('Aktifkan kembali hasil pertandingan ini? Hasil akan dihitung dalam klasemen.')) {
+      try {
+        const match = matches.find(m => m.id === matchId);
+        if (match) {
+          await store.updateMatch({ ...match, status: 'completed' });
+          notify('success', 'Hasil pertandingan diaktifkan kembali');
+        }
+      } catch (error) {
+        notify('error', 'Gagal mengaktifkan hasil');
+      }
+    }
+  };
+
   return (
     <div className="fade-in">
       <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: '0 0 24px', fontFamily: 'Montserrat, sans-serif' }}>
         Manajemen Skor
       </h2>
 
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-        <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: C.primaryDark, color: '#fff' }}>
-              <th style={{ padding: 12, textAlign: 'left' }}>Pertandingan</th>
-              <th style={{ padding: 12, textAlign: 'center' }}>Skor</th>
-              <th style={{ padding: 12, textAlign: 'center' }}>Status</th>
-              <th style={{ padding: 12, textAlign: 'center' }}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {completedMatches.map(match => {
-              const teamA = teams.find(t => t.id === match.team_a_id);
-              const teamB = teams.find(t => t.id === match.team_b_id);
-              const results = pairResults.filter(r => r.match_id === match.id);
-              const aPoints = results.reduce((sum, r) => sum + r.score_team_a, 0);
-              const bPoints = results.reduce((sum, r) => sum + r.score_team_b, 0);
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {[
+          { id: 'all', label: 'Semua Hasil' },
+          { id: 'completed', label: 'Disahkan' },
+          { id: 'draft', label: 'Draft' },
+          { id: 'cancelled', label: 'Dinonaktifkan' },
+        ].map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id as any)}
+            style={{
+              padding: '8px 16px',
+              background: filter === f.id ? C.primary : C.surface,
+              color: filter === f.id ? '#fff' : C.textSecondary,
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 500,
+              border: `1px solid ${filter === f.id ? C.primary : C.border}`,
+              cursor: 'pointer',
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
-              return (
-                <tr key={match.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: 12 }}>
-                    <p style={{ fontWeight: 600, margin: 0 }}>{teamA?.name} vs {teamB?.name}</p>
-                  </td>
-                  <td style={{ padding: 12, textAlign: 'center', fontWeight: 700 }}>
-                    {aPoints} - {bPoints}
-                  </td>
-                  <td style={{ padding: 12, textAlign: 'center' }}>
-                    <span style={{
-                      padding: '4px 12px',
-                      background: `${C.success}15`,
-                      color: C.success,
-                      borderRadius: 12,
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}>
-                      Selesai
-                    </span>
-                  </td>
-                  <td style={{ padding: 12, textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleDeactivate(match.id)}
-                      style={{
-                        padding: '6px 12px',
-                        background: `${C.error}15`,
-                        color: C.error,
-                        borderRadius: 6,
-                        fontSize: 12,
-                        fontWeight: 500,
-                        border: 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Nonaktifkan
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+        {matchesWithResults.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: C.textSecondary }}>
+            <p style={{ margin: 0 }}>Belum ada hasil pertandingan</p>
+          </div>
+        ) : (
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: C.primaryDark, color: '#fff' }}>
+                <th style={{ padding: 12, textAlign: 'left' }}>Pertandingan</th>
+                <th style={{ padding: 12, textAlign: 'center' }}>Skor</th>
+                <th style={{ padding: 12, textAlign: 'center' }}>Status</th>
+                <th style={{ padding: 12, textAlign: 'center' }}>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matchesWithResults.map((match: any) => {
+                const teamA = teams.find(t => t.id === match.team_a_id);
+                const teamB = teams.find(t => t.id === match.team_b_id);
+                const results = pairResults.filter(r => r.match_id === match.id);
+                const aPoints = results.reduce((sum, r) => sum + r.score_team_a, 0);
+                const bPoints = results.reduce((sum, r) => sum + r.score_team_b, 0);
+                const isDraft = match.status === 'ongoing' || match.status === 'upcoming';
+                const isCancelled = match.status === 'cancelled';
+
+                return (
+                  <tr key={match.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ padding: 12 }}>
+                      <p style={{ fontWeight: 600, margin: 0 }}>{teamA?.name} vs {teamB?.name}</p>
+                    </td>
+                    <td style={{ padding: 12, textAlign: 'center', fontWeight: 700 }}>
+                      {aPoints} - {bPoints}
+                    </td>
+                    <td style={{ padding: 12, textAlign: 'center' }}>
+                      <span style={{
+                        padding: '4px 12px',
+                        background: isCancelled ? `${C.error}15` : isDraft ? `${C.warning}15` : `${C.success}15`,
+                        color: isCancelled ? C.error : isDraft ? C.warning : C.success,
+                        borderRadius: 12,
+                        fontSize: 11,
+                        fontWeight: 600,
+                      }}>
+                        {isCancelled ? 'Dinonaktifkan' : isDraft ? 'Draft' : 'Disahkan'}
+                      </span>
+                    </td>
+                    <td style={{ padding: 12, textAlign: 'center' }}>
+                      {isCancelled ? (
+                        <button
+                          onClick={() => handleReactivate(match.id)}
+                          style={{
+                            padding: '6px 12px',
+                            background: `${C.success}15`,
+                            color: C.success,
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            border: 'none',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Aktifkan
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleDeactivate(match.id)}
+                          style={{
+                            padding: '6px 12px',
+                            background: `${C.error}15`,
+                            color: C.error,
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            border: 'none',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Nonaktifkan
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
