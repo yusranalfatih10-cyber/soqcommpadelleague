@@ -41,7 +41,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onRefresh }) => {
     { id: 'score-management', label: 'Manajemen Skor', icon: '📝', roles: ['super_admin', 'admin'] },
     { id: 'teams', label: 'Manajemen Tim', icon: '👥', roles: ['super_admin', 'admin'] },
     { id: 'players', label: 'Manajemen Pemain', icon: '🏃', roles: ['super_admin', 'admin'] },
-    { id: 'mvp-management', label: 'Manajemen Player MVP', icon: '🏆', roles: ['super_admin', 'admin'] },
+    { id: 'mvp-matchday', label: 'MVP Matchday', icon: '🏆', roles: ['super_admin', 'admin'] },
+    { id: 'mvp-liga', label: 'MVP Liga', icon: '🏅', roles: ['super_admin', 'admin'] },
     { id: 'users', label: 'Manajemen User', icon: '👤', roles: ['super_admin'] },
     { id: 'schedule', label: 'Manajemen Jadwal', icon: '📅', roles: ['super_admin', 'admin'] },
     { id: 'generate-schedule', label: 'Generate Jadwal', icon: '🔄', roles: ['super_admin', 'admin'] },
@@ -194,7 +195,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onRefresh }) => {
           {activeMenu === 'score-management' && <ScoreManagement notify={notify} />}
           {activeMenu === 'teams' && <TeamsManagement notify={notify} />}
           {activeMenu === 'players' && <PlayersManagement notify={notify} />}
-          {activeMenu === 'mvp-management' && <MVPManagement notify={notify} />}
+          {activeMenu === 'mvp-matchday' && <MVPMatchdayManagement notify={notify} />}
+          {activeMenu === 'mvp-liga' && <MVPLigaManagement notify={notify} />}
           {activeMenu === 'users' && <UsersManagement notify={notify} />}
           {activeMenu === 'schedule' && <ScheduleManagement notify={notify} />}
           {activeMenu === 'generate-schedule' && <GenerateSchedule notify={notify} />}
@@ -3177,174 +3179,255 @@ const GeneralSettings: React.FC<{ notify: (type: string, msg: string) => void }>
   );
 };
 
-// MVP Management Component
-const MVPManagement: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
-  const matchdays = store.getMatchdays().filter(md => md.status === 'completed');
+// MVP Matchday Management Component (4 slot per pertandingan)
+const MVPMatchdayManagement: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
+  const matches = store.getMatches().filter(m => m.status === 'completed');
   const players = store.getPlayers().filter(p => p.is_active);
   const teams = store.getTeams();
-  const mvps = store.getMVPs();
+  const matchdays = store.getMatchdays();
+  const mvpsMatchday = store.getMVPsMatchday();
+  const matchLineups = store.getMatchLineups();
   
   const [showForm, setShowForm] = useState(false);
-  const [editingMvp, setEditingMvp] = useState<MVP | null>(null);
-  const [selectedMatchday, setSelectedMatchday] = useState('');
+  const [editingMvp, setEditingMvp] = useState<any>(null);
+  const [selectedMatch, setSelectedMatch] = useState('');
+  const [selectedParty, setSelectedParty] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState('');
-  const [reason, setReason] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isPublished, setIsPublished] = useState(false);
 
   const getPlayer = (playerId: string) => players.find(p => p.id === playerId);
   const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
+  const getMatch = (matchId: string) => matches.find(m => m.id === matchId);
   const getMatchday = (matchdayId: string) => matchdays.find(md => md.id === matchdayId);
 
+  // Get players from match lineup for selected match and party
+  const getAvailablePlayers = () => {
+    if (!selectedMatch) return [];
+    
+    const lineup = matchLineups.find(l => l.match_id === selectedMatch && l.party_number === selectedParty);
+    if (!lineup) return [];
+
+    const match = getMatch(selectedMatch);
+    if (!match) return [];
+
+    // Get players from both teams
+    const teamAPlayers = [
+      getPlayer(lineup.team_a_player1_id),
+      getPlayer(lineup.team_a_player2_id)
+    ].filter(p => p) as Player[];
+
+    const teamBPlayers = [
+      getPlayer(lineup.team_b_player1_id),
+      getPlayer(lineup.team_b_player2_id)
+    ].filter(p => p) as Player[];
+
+    return [...teamAPlayers, ...teamBPlayers];
+  };
+
   const handleSave = async () => {
-    if (!selectedMatchday || !selectedPlayer) {
-      notify('error', 'Matchday dan pemain harus dipilih');
+    if (!selectedMatch || !selectedPlayer) {
+      notify('error', 'Pertandingan dan pemain harus dipilih');
       return;
     }
 
-    // Check if MVP already exists for this matchday
-    const existingMvp = mvps.find(m => m.matchday_id === selectedMatchday);
-    
+    const match = getMatch(selectedMatch);
+    if (!match) {
+      notify('error', 'Pertandingan tidak valid');
+      return;
+    }
+
     try {
       if (editingMvp) {
-        await store.updateMVP({ 
+        await store.updateMVPMatchday({ 
           ...editingMvp, 
-          matchday_id: selectedMatchday, 
-          player_id: selectedPlayer, 
-          reason 
+          match_id: selectedMatch,
+          matchday_id: match.matchday_id,
+          party_number: selectedParty,
+          player_id: selectedPlayer,
+          notes,
+          is_published: isPublished,
         });
-        notify('success', 'MVP berhasil diperbarui');
+        notify('success', 'MVP Matchday berhasil diperbarui');
       } else {
-        if (existingMvp) {
-          notify('error', 'MVP untuk matchday ini sudah ada. Silakan edit yang existing.');
-          return;
-        }
-        await store.addMVP({ 
-          matchday_id: selectedMatchday, 
-          player_id: selectedPlayer, 
-          reason 
+        await store.addMVPMatchday({ 
+          season: store.getLeague().season,
+          match_id: selectedMatch,
+          matchday_id: match.matchday_id,
+          party_number: selectedParty,
+          player_id: selectedPlayer,
+          notes,
+          is_published: isPublished,
         });
-        notify('success', 'MVP berhasil ditambahkan');
+        notify('success', 'MVP Matchday berhasil ditambahkan');
       }
       
       setShowForm(false);
       setEditingMvp(null);
-      setSelectedMatchday('');
+      setSelectedMatch('');
+      setSelectedParty(1);
       setSelectedPlayer('');
-      setReason('');
-    } catch (error) {
-      console.error('Error saving MVP:', error);
-      notify('error', 'Gagal menyimpan MVP. Silakan coba lagi.');
+      setNotes('');
+      setIsPublished(false);
+    } catch (error: any) {
+      console.error('Error saving MVP Matchday:', error);
+      notify('error', error.message || 'Gagal menyimpan MVP Matchday');
     }
   };
 
-  const handleEdit = (mvp: MVP) => {
+  const handleEdit = (mvp: any) => {
     setEditingMvp(mvp);
-    setSelectedMatchday(mvp.matchday_id);
+    setSelectedMatch(mvp.match_id);
+    setSelectedParty(mvp.party_number);
     setSelectedPlayer(mvp.player_id);
-    setReason(mvp.reason);
+    setNotes(mvp.notes);
+    setIsPublished(mvp.is_published);
     setShowForm(true);
   };
 
   const handleDelete = async (mvpId: string) => {
-    if (confirm('Yakin ingin menghapus MVP ini?')) {
+    if (confirm('Yakin ingin menghapus MVP Matchday ini?')) {
       try {
-        await store.deleteMVP(mvpId);
-        notify('success', 'MVP berhasil dihapus');
-      } catch (error) {
-        console.error('Error deleting MVP:', error);
-        notify('error', 'Gagal menghapus MVP. Silakan coba lagi.');
+        await store.deleteMVPMatchday(mvpId);
+        notify('success', 'MVP Matchday berhasil dihapus');
+      } catch (error: any) {
+        console.error('Error deleting MVP Matchday:', error);
+        notify('error', error.message || 'Gagal menghapus MVP Matchday');
       }
     }
   };
 
-  // Get matchdays that don't have MVP yet
-  const availableMatchdays = matchdays.filter(md => !mvps.some(m => m.matchday_id === md.id));
+  // Group MVPs by match
+  const mvpsByMatch = matches.map(match => {
+    const matchMvps = mvpsMatchday.filter(m => m.match_id === match.id);
+    return { match, mvps: matchMvps };
+  }).filter(item => item.mvps.length > 0);
+
+  const availablePlayers = getAvailablePlayers();
 
   return (
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>
-          Manajemen Player MVP
+          🏆 MVP Matchday
         </h2>
         <button 
-          onClick={() => { setShowForm(true); setEditingMvp(null); setSelectedMatchday(''); setSelectedPlayer(''); setReason(''); }} 
-          disabled={availableMatchdays.length === 0}
+          onClick={() => { setShowForm(true); setEditingMvp(null); setSelectedMatch(''); setSelectedParty(1); setSelectedPlayer(''); setNotes(''); setIsPublished(false); }} 
           style={{ 
             padding: '10px 20px', 
-            background: availableMatchdays.length === 0 ? C.border : C.primary, 
+            background: C.primary, 
             color: '#fff', 
             borderRadius: 8, 
             fontSize: 13, 
             fontWeight: 600, 
             border: 'none', 
-            cursor: availableMatchdays.length === 0 ? 'not-allowed' : 'pointer',
-            opacity: availableMatchdays.length === 0 ? 0.5 : 1,
+            cursor: 'pointer',
           }}
         >
-          + Tambah Player MVP
+          + Tambah MVP Matchday
         </button>
       </div>
-
-      {availableMatchdays.length === 0 && !showForm && (
-        <div style={{ 
-          padding: 16, 
-          background: `${C.accent}15`, 
-          borderRadius: 8, 
-          marginBottom: 24,
-          fontSize: 13,
-          color: C.textSecondary,
-        }}>
-          ✅ Semua matchday yang sudah selesai sudah memiliki MVP
-        </div>
-      )}
 
       {showForm && (
         <div className="fade-in" style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
-            {editingMvp ? 'Edit Player MVP' : 'Tambah Player MVP Baru'}
+            {editingMvp ? 'Edit MVP Matchday' : 'Tambah MVP Matchday Baru'}
           </h3>
           
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Matchday</label>
-            <select 
-              value={selectedMatchday} 
-              onChange={e => setSelectedMatchday(e.target.value)} 
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
-            >
-              <option value="">Pilih matchday</option>
-              {(editingMvp ? matchdays : availableMatchdays).map(md => (
-                <option key={md.id} value={md.id}>Matchday {md.matchday_number} - {md.date}</option>
-              ))}
-            </select>
-          </div>
+          <div style={{ display: 'grid', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Pertandingan</label>
+              <select 
+                value={selectedMatch} 
+                onChange={e => { setSelectedMatch(e.target.value); setSelectedParty(1); setSelectedPlayer(''); }}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              >
+                <option value="">Pilih pertandingan</option>
+                {matches.map(match => {
+                  const teamA = getTeam(match.team_a_id);
+                  const teamB = getTeam(match.team_b_id);
+                  const matchday = getMatchday(match.matchday_id);
+                  return (
+                    <option key={match.id} value={match.id}>
+                      {matchday?.name} - {teamA?.name} vs {teamB?.name}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Pemain</label>
-            <select 
-              value={selectedPlayer} 
-              onChange={e => setSelectedPlayer(e.target.value)} 
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
-            >
-              <option value="">Pilih pemain</option>
-              {players.map(player => {
-                const team = getTeam(player.team_id);
-                return (
-                  <option key={player.id} value={player.id}>
-                    {player.name} {team ? `(${team.name})` : ''}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+            {selectedMatch && (
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Partai</label>
+                <select 
+                  value={selectedParty} 
+                  onChange={e => { setSelectedParty(parseInt(e.target.value)); setSelectedPlayer(''); }}
+                  style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+                >
+                  <option value={1}>Partai 1</option>
+                  <option value={2}>Partai 2</option>
+                  <option value={3}>Partai 3</option>
+                  <option value={4}>Partai 4</option>
+                </select>
+              </div>
+            )}
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Alasan (Opsional)</label>
-            <textarea 
-              value={reason} 
-              onChange={e => setReason(e.target.value)} 
-              rows={3}
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14, resize: 'vertical' }} 
-              placeholder="Alasan pemilihan MVP..."
-            />
+            {selectedMatch && availablePlayers.length > 0 && (
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Pemain MVP</label>
+                <select 
+                  value={selectedPlayer} 
+                  onChange={e => setSelectedPlayer(e.target.value)} 
+                  style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+                >
+                  <option value="">Pilih pemain</option>
+                  {availablePlayers.map(player => {
+                    const team = getTeam(player.team_id);
+                    return (
+                      <option key={player.id} value={player.id}>
+                        {player.name} ({team?.name})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+            {selectedMatch && availablePlayers.length === 0 && (
+              <div style={{ padding: 16, background: `${C.warning}15`, borderRadius: 8, border: `1px solid ${C.warning}30` }}>
+                <p style={{ fontSize: 13, color: C.warning, margin: 0, fontWeight: 600 }}>
+                  ⚠️ Susunan pemain untuk partai ini belum diatur
+                </p>
+                <p style={{ fontSize: 12, color: C.textSecondary, margin: '8px 0 0' }}>
+                  Silakan atur susunan pemain di menu Manajemen Jadwal terlebih dahulu
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Catatan Penilaian (Opsional)</label>
+              <textarea 
+                value={notes} 
+                onChange={e => setNotes(e.target.value)} 
+                rows={3}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14, resize: 'vertical' }} 
+                placeholder="Catatan penilaian panitia..."
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={isPublished}
+                  onChange={e => setIsPublished(e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 500, color: C.textPrimary }}>
+                  Publikasikan MVP (tampilkan di situs publik)
+                </span>
+              </label>
+            </div>
           </div>
 
           {/* Preview */}
@@ -3416,89 +3499,83 @@ const MVPManagement: React.FC<{ notify: (type: string, msg: string) => void }> =
         </div>
       )}
 
-      <div style={{ display: 'grid', gap: 12 }}>
-        {mvps.map(mvp => {
-          const player = getPlayer(mvp.player_id);
-          const matchday = getMatchday(mvp.matchday_id);
-          const team = player ? getTeam(player.team_id) : null;
+      <div style={{ display: 'grid', gap: 16 }}>
+        {mvpsByMatch.map(({ match, mvps }) => {
+          const teamA = getTeam(match.team_a_id);
+          const teamB = getTeam(match.team_b_id);
+          const matchday = getMatchday(match.matchday_id);
 
           return (
-            <div key={mvp.id} style={{ 
-              background: C.surface, 
-              borderRadius: 12, 
-              padding: 16, 
-              border: `2px solid ${C.accent}`, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 16,
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateX(4px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(168, 216, 46, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateX(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
-              {player?.photo_url ? (
-                <img 
-                  src={player.photo_url} 
-                  alt={player.name} 
-                  style={{ 
-                    width: 60, 
-                    height: 60, 
-                    borderRadius: '50%', 
-                    objectFit: 'cover',
-                    border: `3px solid ${C.accent}`,
-                  }} 
-                />
-              ) : (
-                <div style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: 24,
-                  border: `3px solid ${C.accent}`,
-                }}>
-                  {player?.name.charAt(0) || '?'}
-                </div>
-              )}
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
-                  🏆 {player?.name || 'Unknown Player'}
-                </p>
+            <div key={match.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                  {matchday?.name} - {teamA?.name} vs {teamB?.name}
+                </h3>
                 <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>
-                  Matchday {matchday?.matchday_number} • {matchday?.date}
+                  {matchday?.date} • Court {match.court}
                 </p>
-                {team && (
-                  <p style={{ fontSize: 12, color: C.textSecondary, margin: '2px 0 0' }}>
-                    {team.name}
-                  </p>
-                )}
-                {mvp.reason && (
-                  <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0', fontStyle: 'italic' }}>
-                    "{mvp.reason}"
-                  </p>
-                )}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => handleEdit(mvp)} style={{ padding: '8px 16px', fontSize: 12, color: C.primary, background: `${C.primary}15`, borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 500 }}>Edit</button>
-                <button onClick={() => handleDelete(mvp.id)} style={{ padding: '8px 16px', fontSize: 12, color: C.error, background: `${C.error}15`, borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 500 }}>Hapus</button>
+              <div style={{ padding: 16 }}>
+                {[1, 2, 3, 4].map(party => {
+                  const mvp = mvps.find(m => m.party_number === party);
+                  const player = mvp ? getPlayer(mvp.player_id) : null;
+                  const team = player ? getTeam(player.team_id) : null;
+
+                  return (
+                    <div key={party} style={{ 
+                      padding: 12, 
+                      background: mvp ? `${C.accent}10` : C.bg, 
+                      borderRadius: 8, 
+                      marginBottom: 8,
+                      border: mvp ? `1px solid ${C.accent}30` : `1px solid ${C.border}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.primaryDark, minWidth: 70 }}>
+                          Partai {party}:
+                        </span>
+                        {mvp && player ? (
+                          <>
+                            {player.photo_url ? (
+                              <img src={player.photo_url} alt={player.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
+                                {player.name.charAt(0)}
+                              </div>
+                            )}
+                            <div>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                                🏆 {player.name}
+                              </p>
+                              <p style={{ fontSize: 11, color: C.textSecondary, margin: '2px 0 0' }}>
+                                {team?.name} {mvp.is_published ? '• 🟢 Published' : '• ⚪ Draft'}
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 12, color: C.textSecondary, fontStyle: 'italic' }}>
+                            Belum ada MVP
+                          </span>
+                        )}
+                      </div>
+                      {mvp && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => handleEdit(mvp)} style={{ padding: '6px 12px', fontSize: 11, color: C.primary, background: `${C.primary}15`, borderRadius: 6, border: 'none', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={() => handleDelete(mvp.id)} style={{ padding: '6px 12px', fontSize: 11, color: C.error, background: `${C.error}15`, borderRadius: 6, border: 'none', cursor: 'pointer' }}>Hapus</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
 
-      {mvps.length === 0 && !showForm && (
+      {mvpsByMatch.length === 0 && !showForm && (
         <div style={{ 
           textAlign: 'center', 
           padding: 60,
@@ -3508,10 +3585,331 @@ const MVPManagement: React.FC<{ notify: (type: string, msg: string) => void }> =
         }}>
           <div style={{ fontSize: 64, marginBottom: 16 }}>🏆</div>
           <h3 style={{ fontSize: 18, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>
-            Belum Ada MVP
+            Belum Ada MVP Matchday
           </h3>
           <p style={{ fontSize: 13, color: C.textSecondary, margin: 0 }}>
-            Klik tombol "Tambah Player MVP" untuk memilih pemain terbaik setiap matchday
+            Klik tombol "Tambah MVP Matchday" untuk memilih pemain terbaik setiap partai
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// MVP Liga Management Component
+const MVPLigaManagement: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
+  const players = store.getPlayers().filter(p => p.is_active);
+  const teams = store.getTeams();
+  const league = store.getLeague();
+  const mvpsLiga = store.getMVPsLiga();
+  
+  const [showForm, setShowForm] = useState(false);
+  const [editingMvp, setEditingMvp] = useState<any>(null);
+  const [selectedSeason, setSelectedSeason] = useState(league.season);
+  const [selectedPlayer, setSelectedPlayer] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isPublished, setIsPublished] = useState(false);
+
+  const getPlayer = (playerId: string) => players.find(p => p.id === playerId);
+  const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
+
+  const handleSave = async () => {
+    if (!selectedSeason || !selectedPlayer) {
+      notify('error', 'Musim dan pemain harus dipilih');
+      return;
+    }
+
+    try {
+      if (editingMvp) {
+        await store.updateMVPLiga({ 
+          ...editingMvp, 
+          season: selectedSeason,
+          player_id: selectedPlayer,
+          notes,
+          is_published: isPublished,
+        });
+        notify('success', 'MVP Liga berhasil diperbarui');
+      } else {
+        await store.addMVPLiga({ 
+          season: selectedSeason,
+          player_id: selectedPlayer,
+          notes,
+          is_published: isPublished,
+        });
+        notify('success', 'MVP Liga berhasil ditambahkan');
+      }
+      
+      setShowForm(false);
+      setEditingMvp(null);
+      setSelectedSeason(league.season);
+      setSelectedPlayer('');
+      setNotes('');
+      setIsPublished(false);
+    } catch (error: any) {
+      console.error('Error saving MVP Liga:', error);
+      notify('error', error.message || 'Gagal menyimpan MVP Liga');
+    }
+  };
+
+  const handleEdit = (mvp: any) => {
+    setEditingMvp(mvp);
+    setSelectedSeason(mvp.season);
+    setSelectedPlayer(mvp.player_id);
+    setNotes(mvp.notes);
+    setIsPublished(mvp.is_published);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (mvpId: string) => {
+    if (confirm('Yakin ingin menghapus MVP Liga ini?')) {
+      try {
+        await store.deleteMVPLiga(mvpId);
+        notify('success', 'MVP Liga berhasil dihapus');
+      } catch (error: any) {
+        console.error('Error deleting MVP Liga:', error);
+        notify('error', error.message || 'Gagal menghapus MVP Liga');
+      }
+    }
+  };
+
+  // Group MVPs by season
+  const mvpsBySeason = mvpsLiga.reduce((acc, mvp) => {
+    if (!acc[mvp.season]) acc[mvp.season] = [];
+    acc[mvp.season].push(mvp);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  return (
+    <div className="fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>
+          🏅 MVP Liga
+        </h2>
+        <button 
+          onClick={() => { setShowForm(true); setEditingMvp(null); setSelectedSeason(league.season); setSelectedPlayer(''); setNotes(''); setIsPublished(false); }} 
+          style={{ 
+            padding: '10px 20px', 
+            background: C.primary, 
+            color: '#fff', 
+            borderRadius: 8, 
+            fontSize: 13, 
+            fontWeight: 600, 
+            border: 'none', 
+            cursor: 'pointer',
+          }}
+        >
+          + Tetapkan MVP Liga
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="fade-in" style={{ background: C.surface, borderRadius: 12, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 16px' }}>
+            {editingMvp ? 'Edit MVP Liga' : 'Tetapkan MVP Liga Baru'}
+          </h3>
+          
+          <div style={{ display: 'grid', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Musim Liga</label>
+              <input 
+                type="text"
+                value={selectedSeason} 
+                onChange={e => setSelectedSeason(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+                placeholder="Contoh: 2025"
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Pemain MVP</label>
+              <select 
+                value={selectedPlayer} 
+                onChange={e => setSelectedPlayer(e.target.value)} 
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14 }}
+              >
+                <option value="">Pilih pemain</option>
+                {players.map(player => {
+                  const team = getTeam(player.team_id);
+                  return (
+                    <option key={player.id} value={player.id}>
+                      {player.name} ({team?.name})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.textPrimary, marginBottom: 8 }}>Catatan Penilaian</label>
+              <textarea 
+                value={notes} 
+                onChange={e => setNotes(e.target.value)} 
+                rows={4}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14, resize: 'vertical' }} 
+                placeholder="Alasan pemilihan MVP Liga..."
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={isPublished}
+                  onChange={e => setIsPublished(e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 500, color: C.textPrimary }}>
+                  Publikasikan MVP Liga (tampilkan di situs publik)
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Preview */}
+          {selectedPlayer && (
+            <div style={{ 
+              padding: 16, 
+              background: C.bg, 
+              borderRadius: 8, 
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+            }}>
+              {(() => {
+                const player = getPlayer(selectedPlayer);
+                if (!player) return null;
+                const team = getTeam(player.team_id);
+                return (
+                  <>
+                    {player.photo_url ? (
+                      <img 
+                        src={player.photo_url} 
+                        alt={player.name} 
+                        style={{ 
+                          width: 80, 
+                          height: 80, 
+                          borderRadius: '50%', 
+                          objectFit: 'cover',
+                          border: `3px solid ${C.accent}`,
+                        }} 
+                      />
+                    ) : (
+                      <div style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: '50%',
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: 32,
+                        border: `3px solid ${C.accent}`,
+                      }}>
+                        {player.name.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <p style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                        {player.name}
+                      </p>
+                      {team && (
+                        <p style={{ fontSize: 13, color: C.textSecondary, margin: '4px 0 0' }}>
+                          {team.name}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <button onClick={handleSave} style={{ padding: '12px', background: C.success, color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Simpan</button>
+            <button onClick={() => { setShowForm(false); setEditingMvp(null); }} style={{ padding: '12px', background: C.bg, color: C.textSecondary, borderRadius: 8, fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Batal</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 16 }}>
+        {Object.entries(mvpsBySeason).map(([season, seasonMvps]) => (
+          <div key={season} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                Musim {season}
+              </h3>
+            </div>
+            <div style={{ padding: 16 }}>
+              {seasonMvps.map(mvp => {
+                const player = getPlayer(mvp.player_id);
+                const team = player ? getTeam(player.team_id) : null;
+
+                return (
+                  <div key={mvp.id} style={{ 
+                    padding: 16, 
+                    background: `${C.accent}10`, 
+                    borderRadius: 8, 
+                    border: `1px solid ${C.accent}30`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      {player?.photo_url ? (
+                        <img src={player.photo_url} alt={player.name} style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', border: `3px solid ${C.accent}` }} />
+                      ) : (
+                        <div style={{ width: 60, height: 60, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 24, border: `3px solid ${C.accent}` }}>
+                          {player?.name.charAt(0) || '?'}
+                        </div>
+                      )}
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                          🏅 {player?.name || 'Unknown Player'}
+                        </p>
+                        {team && (
+                          <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>
+                            {team.name}
+                          </p>
+                        )}
+                        <p style={{ fontSize: 11, color: C.textSecondary, margin: '2px 0 0' }}>
+                          {mvp.is_published ? '🟢 Published' : '⚪ Draft'}
+                        </p>
+                        {mvp.notes && (
+                          <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0', fontStyle: 'italic' }}>
+                            "{mvp.notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => handleEdit(mvp)} style={{ padding: '8px 16px', fontSize: 12, color: C.primary, background: `${C.primary}15`, borderRadius: 6, border: 'none', cursor: 'pointer' }}>Edit</button>
+                      <button onClick={() => handleDelete(mvp.id)} style={{ padding: '8px 16px', fontSize: 12, color: C.error, background: `${C.error}15`, borderRadius: 6, border: 'none', cursor: 'pointer' }}>Hapus</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {Object.keys(mvpsBySeason).length === 0 && !showForm && (
+        <div style={{ 
+          textAlign: 'center', 
+          padding: 60,
+          background: C.surface,
+          borderRadius: 12,
+          border: `1px solid ${C.border}`,
+        }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>🏅</div>
+          <h3 style={{ fontSize: 18, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>
+            Belum Ada MVP Liga
+          </h3>
+          <p style={{ fontSize: 13, color: C.textSecondary, margin: 0 }}>
+            Klik tombol "Tetapkan MVP Liga" untuk memilih pemain terbaik musim ini
           </p>
         </div>
       )}

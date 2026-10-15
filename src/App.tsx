@@ -1144,64 +1144,180 @@ const MVPView: React.FC<{ teams: any[]; players: any[]; matchdays: any[]; mvps: 
   const getPlayer = (playerId: string) => players.find(p => p.id === playerId);
   const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
   const getMatchday = (matchdayId: string) => matchdays.find(md => md.id === matchdayId);
+  const getMatch = (matchId: string) => store.getMatches().find(m => m.id === matchId);
 
-  const mvpsByMatchday = matchdays
-    .filter(md => md.status === 'completed')
-    .map(md => {
-      const mvp = mvps.find(m => m.matchday_id === md.id);
-      return { matchday: md, mvp };
+  // Get MVP Matchday and MVP Liga
+  const mvpsMatchday = store.getMVPsMatchday().filter(m => m.is_published);
+  const mvpsLiga = store.getMVPsLiga().filter(m => m.is_published);
+  const league = store.getLeague();
+
+  // Group MVP Matchday by match
+  const mvpsByMatch = store.getMatches()
+    .filter(m => m.status === 'completed')
+    .map(match => {
+      const matchMvps = mvpsMatchday.filter(m => m.match_id === match.id);
+      return { match, mvps: matchMvps };
     })
-    .filter(item => item.mvp);
+    .filter(item => item.mvps.length > 0);
+
+  // Get current season MVP Liga
+  const currentMVPLiga = mvpsLiga.find(m => m.season === league.season);
 
   return (
     <div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>🏆 Player MVP</h1>
-      <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 24px' }}>Pemain terbaik setiap matchday</p>
+      <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 24px' }}>Pemain terbaik setiap partai dan musim</p>
 
-      {mvpsByMatchday.length > 0 ? (
-        <div style={{ display: 'grid', gap: 16 }}>
-          {mvpsByMatchday.map(({ matchday, mvp }) => {
-            if (!mvp) return null;
-            const player = getPlayer(mvp.player_id);
-            const team = player ? getTeam(player.team_id) : null;
-
-            return (
-              <div key={mvp.id} style={{ background: C.surface, borderRadius: 12, border: `2px solid ${C.accent}`, overflow: 'hidden' }}>
-                <div style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.success})`, padding: '12px 16px' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>🏆 MVP Matchday {matchday.matchday_number}</h3>
-                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', margin: '4px 0 0' }}>{matchday.date}</p>
-                </div>
-                <div style={{ padding: 20, display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ width: 120, height: 120, borderRadius: '50%', overflow: 'hidden', border: `4px solid ${C.accent}`, flexShrink: 0 }}>
-                    {player?.photo_url ? (
-                      <img src={player.photo_url} alt={player?.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 48 }}>
-                        {player?.name.charAt(0) || '?'}
+      {/* MVP Liga Section */}
+      {currentMVPLiga && (
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>🏅 MVP Liga {league.season}</h2>
+          <div style={{ 
+            background: `linear-gradient(135deg, ${C.accent}20, ${C.success}20)`, 
+            borderRadius: 16, 
+            border: `3px solid ${C.accent}`, 
+            overflow: 'hidden',
+            boxShadow: '0 8px 24px rgba(168, 216, 46, 0.2)',
+          }}>
+            <div style={{ padding: 24, display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+              {(() => {
+                const player = getPlayer(currentMVPLiga.player_id);
+                const team = player ? getTeam(player.team_id) : null;
+                return (
+                  <>
+                    <div style={{ width: 140, height: 140, borderRadius: '50%', overflow: 'hidden', border: `5px solid ${C.accent}`, flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                      {player?.photo_url ? (
+                        <img src={player.photo_url} alt={player?.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 56 }}>
+                          {player?.name.charAt(0) || '?'}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 250 }}>
+                      <div style={{ 
+                        display: 'inline-block', 
+                        padding: '6px 16px', 
+                        background: C.accent, 
+                        color: '#fff', 
+                        borderRadius: 20, 
+                        fontSize: 12, 
+                        fontWeight: 700, 
+                        marginBottom: 12,
+                        letterSpacing: '0.5px',
+                      }}>
+                        🏅 MOST VALUABLE PLAYER
                       </div>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <h2 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>{player?.name || 'Unknown Player'}</h2>
-                    {team && <p style={{ fontSize: 14, color: C.textSecondary, margin: '0 0 12px' }}>{team.name}</p>}
-                    {mvp.reason && (
-                      <div style={{ padding: 12, background: `${C.accent}10`, borderRadius: 8, border: `1px solid ${C.accent}30` }}>
-                        <p style={{ fontSize: 12, color: C.textPrimary, margin: 0, fontStyle: 'italic' }}>"{mvp.reason}"</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div style={{ textAlign: 'center', padding: 60, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>Belum Ada MVP</h3>
-          <p style={{ color: C.textSecondary, fontSize: 13 }}>Player MVP akan ditampilkan setelah admin memilih pemain terbaik</p>
+                      <h2 style={{ fontSize: 28, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>
+                        {player?.name || 'Unknown Player'}
+                      </h2>
+                      {team && (
+                        <p style={{ fontSize: 16, color: C.textSecondary, margin: '0 0 16px', fontWeight: 500 }}>
+                          {team.name}
+                        </p>
+                      )}
+                      {currentMVPLiga.notes && (
+                        <div style={{ padding: 16, background: 'rgba(255,255,255,0.7)', borderRadius: 12, border: `1px solid ${C.accent}30` }}>
+                          <p style={{ fontSize: 14, color: C.textPrimary, margin: 0, fontStyle: 'italic', lineHeight: 1.6 }}>
+                            "{currentMVPLiga.notes}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
+
+      {/* MVP Matchday Section */}
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>🏆 MVP Matchday</h2>
+        
+        {mvpsByMatch.length > 0 ? (
+          <div style={{ display: 'grid', gap: 20 }}>
+            {mvpsByMatch.map(({ match, mvps }) => {
+              const teamA = getTeam(match.team_a_id);
+              const teamB = getTeam(match.team_b_id);
+              const matchday = getMatchday(match.matchday_id);
+
+              return (
+                <div key={match.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 20px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                      {matchday?.name} - {teamA?.name} vs {teamB?.name}
+                    </h3>
+                    <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>
+                      {matchday?.date} • Court {match.court}
+                    </p>
+                  </div>
+                  <div style={{ padding: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
+                      {[1, 2, 3, 4].map(party => {
+                        const mvp = mvps.find(m => m.party_number === party);
+                        const player = mvp ? getPlayer(mvp.player_id) : null;
+                        const team = player ? getTeam(player.team_id) : null;
+
+                        return (
+                          <div key={party} style={{ 
+                            padding: 16, 
+                            background: mvp ? `${C.accent}10` : C.bg, 
+                            borderRadius: 8, 
+                            border: mvp ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
+                            textAlign: 'center',
+                          }}>
+                            <p style={{ fontSize: 12, fontWeight: 600, color: C.primaryDark, margin: '0 0 12px' }}>
+                              Partai {party}
+                            </p>
+                            {mvp && player ? (
+                              <>
+                                <div style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${C.accent}`, margin: '0 auto 12px' }}>
+                                  {player.photo_url ? (
+                                    <img src={player.photo_url} alt={player.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 32 }}>
+                                      {player.name.charAt(0)}
+                                    </div>
+                                  )}
+                                </div>
+                                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: '0 0 4px' }}>
+                                  🏆 {player.name}
+                                </p>
+                                {team && (
+                                  <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>
+                                    {team.name}
+                                  </p>
+                                )}
+                                {mvp.notes && (
+                                  <p style={{ fontSize: 11, color: C.textSecondary, margin: '8px 0 0', fontStyle: 'italic' }}>
+                                    "{mvp.notes}"
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ padding: 20, color: C.textSecondary, fontSize: 12 }}>
+                                Belum ada MVP
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 60, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>Belum Ada MVP Matchday</h3>
+            <p style={{ color: C.textSecondary, fontSize: 13 }}>MVP Matchday akan ditampilkan setelah admin memilih pemain terbaik setiap partai</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1255,7 +1371,24 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
     );
   }
 
-  return <AdminPanelLazy onExit={onExit} onRefresh={onRefresh} />;
+  return (
+    <React.Suspense fallback={
+      <div style={{ 
+        minHeight: '100vh', 
+        background: C.bg, 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <Logo size="lg" />
+          <p style={{ color: C.textSecondary, fontSize: 14, marginTop: 16 }}>Memuat panel admin...</p>
+        </div>
+      </div>
+    }>
+      <AdminPanelLazy onExit={onExit} onRefresh={onRefresh} />
+    </React.Suspense>
+  );
 };
 
 // Lazy load AdminPanel
