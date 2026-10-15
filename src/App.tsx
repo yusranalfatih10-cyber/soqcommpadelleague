@@ -1,8 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { store } from './store';
-import { Page, Team, Match, Matchday, Standing, PairMatchResult, Pair, Player, User } from './types';
-import { v4 as uuidv4 } from 'uuid';
-import AdminSettings from './components/AdminSettings';
 
 // Colors
 const C = {
@@ -30,1014 +27,782 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; logoUrl?: string }> = ({ size 
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{ position: 'relative', width: s, height: s }}>
         {logoUrl ? (
-          <img 
-            src={logoUrl} 
-            alt="SOQ.COMM PADEL LEAGUE" 
-            style={{ 
-              width: s, 
-              height: s, 
-              borderRadius: '50%', 
-              objectFit: 'cover',
-              border: `2px solid ${C.primary}`,
-            }} 
-          />
+          <img src={logoUrl} alt="Logo" style={{ width: s, height: s, borderRadius: '50%', objectFit: 'cover' }} />
         ) : (
           <div style={{
             width: s, height: s, borderRadius: '50%',
             background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ color: '#fff', fontWeight: 700, fontFamily: 'Montserrat, sans-serif', fontSize: fs }}>S</span>
+            <span style={{ color: '#fff', fontWeight: 700, fontSize: fs }}>S</span>
           </div>
         )}
-        <div style={{
-          position: 'absolute', bottom: -2, right: -2,
-          width: s * 0.3, height: s * 0.3, borderRadius: '50%',
-          background: C.accent,
-        }} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <span style={{ fontWeight: 700, color: C.textPrimary, fontFamily: 'Montserrat, sans-serif', fontSize: fs, lineHeight: 1.2 }}>SOQ.COMM</span>
+        <span style={{ fontWeight: 700, color: C.textPrimary, fontSize: fs, lineHeight: 1.2 }}>SOQ.COMM</span>
         <span style={{ fontWeight: 600, color: C.primary, fontSize: fs * 0.75, lineHeight: 1.2 }}>PADEL LEAGUE</span>
       </div>
     </div>
   );
 };
 
-// Generate klasemen image using Canvas API (more reliable)
-const generateStandingsImage = async (standings: Standing[], teams: Team[], league: any): Promise<string> => {
-  return new Promise((resolve) => {
-    try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      if (!ctx) {
-        console.error('Canvas context not available');
-        resolve('');
-        return;
-      }
+// Error Boundary Component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-      const width = 1920;
-      const rowHeight = 70;
-      const headerHeight = 220;
-      const height = headerHeight + (standings.length * rowHeight) + 120;
-      
-      canvas.width = width;
-      canvas.height = height;
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
 
-      // Background
-      ctx.fillStyle = '#F5FBFC';
-      ctx.fillRect(0, 0, width, height);
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
 
-      // Header gradient
-      const gradient = ctx.createLinearGradient(0, 0, width, 0);
-      gradient.addColorStop(0, '#087E91');
-      gradient.addColorStop(1, '#16B9C0');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, headerHeight);
-
-      // Logo liga
-      const drawLogo = () => {
-        return new Promise<void>((resolveLogo) => {
-          if (league.logo_url) {
-            const logoImg = new Image();
-            logoImg.onload = () => {
-              // Gambar logo dengan clipping circular
-              ctx.save();
-              ctx.beginPath();
-              ctx.arc(100, 110, 50, 0, Math.PI * 2);
-              ctx.clip();
-              ctx.drawImage(logoImg, 50, 60, 100, 100);
-              ctx.restore();
-              resolveLogo();
-            };
-            logoImg.onerror = () => {
-              // Fallback ke logo default jika gagal memuat
-              ctx.beginPath();
-              ctx.arc(100, 110, 50, 0, Math.PI * 2);
-              ctx.fillStyle = 'rgba(255,255,255,0.2)';
-              ctx.fill();
-              ctx.fillStyle = '#fff';
-              ctx.font = 'bold 40px Arial, sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText('S', 100, 110);
-              resolveLogo();
-            };
-            logoImg.src = league.logo_url;
-          } else {
-            // Logo default jika tidak ada logo
-            ctx.beginPath();
-            ctx.arc(100, 110, 50, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 40px Arial, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('S', 100, 110);
-            resolveLogo();
-          }
-        });
-      };
-
-      // Gambar logo dan lanjutkan
-      drawLogo().then(() => {
-
-      // Title
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 36px Arial, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('KLASEMEN LIGA PADEL', 180, 90);
-      ctx.font = '18px Arial, sans-serif';
-      ctx.fillText(`${league.name} • Season ${league.season}`, 180, 120);
-      ctx.font = '14px Arial, sans-serif';
-      ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 180, 145);
-
-      // Table header
-      const tableTop = headerHeight + 20;
-      ctx.fillStyle = '#087E91';
-      ctx.fillRect(40, tableTop, width - 80, 50);
-      
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 15px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const cols = ['Pos', 'Nama Tim', 'Main', 'Total Poin', 'Pasangan Menang', 'Pasangan Kalah', 'Selisih'];
-      const colWidths = [80, 450, 100, 150, 180, 180, 150];
-      let x = 40;
-      cols.forEach((col, i) => {
-        ctx.fillText(col, x + colWidths[i] / 2, tableTop + 25);
-        x += colWidths[i];
-      });
-
-      // Table rows
-      standings.forEach((s, idx) => {
-        const team = teams.find(t => t.id === s.team_id);
-        const y = tableTop + 50 + (idx * rowHeight);
-        
-        // Row background
-        if (idx === 0) {
-          ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
-          ctx.fillRect(40, y, width - 80, rowHeight);
-        } else if (idx % 2 === 0) {
-          ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
-          ctx.fillRect(40, y, width - 80, rowHeight);
-        }
-
-        // Position badge
-        ctx.beginPath();
-        ctx.arc(80, y + rowHeight / 2, 20, 0, Math.PI * 2);
-        ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
-        ctx.fill();
-        ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
-        ctx.font = 'bold 16px Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(idx + 1), 80, y + rowHeight / 2);
-
-        // Team logo placeholder
-        ctx.beginPath();
-        ctx.arc(160, y + rowHeight / 2, 22, 0, Math.PI * 2);
-        ctx.fillStyle = '#16B9C0';
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 18px Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(team?.name.charAt(0) || '?', 160, y + rowHeight / 2);
-
-        // Team name
-        ctx.fillStyle = '#173D4A';
-        ctx.font = '500 16px Arial, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(team?.name || 'Unknown', 200, y + rowHeight / 2);
-
-        // Stats
-        ctx.textAlign = 'center';
-        ctx.font = '16px Arial, sans-serif';
-        ctx.fillStyle = '#173D4A';
-        x = 40 + colWidths[0] + colWidths[1];
-        ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
-        x += colWidths[2];
-        
-        // Total points with background
-        ctx.fillStyle = 'rgba(22, 185, 192, 0.15)';
-        ctx.fillRect(x + 20, y + rowHeight / 2 - 15, colWidths[3] - 40, 30);
-        ctx.fillStyle = '#087E91';
-        ctx.font = 'bold 16px Arial, sans-serif';
-        ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
-        x += colWidths[3];
-        
-        ctx.font = 'bold 16px Arial, sans-serif';
-        ctx.fillStyle = '#2EAD72';
-        ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
-        x += colWidths[4];
-        ctx.fillStyle = '#E65C5C';
-        ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
-        x += colWidths[5];
-        ctx.fillStyle = '#173D4A';
-        ctx.font = '500 16px Arial, sans-serif';
-        ctx.fillText(`${s.pair_difference > 0 ? '+' : ''}${s.pair_difference}`, x + colWidths[6] / 2, y + rowHeight / 2);
-      });
-
-      // Footer
-      const footerY = tableTop + 50 + (standings.length * rowHeight) + 40;
-      ctx.fillStyle = '#718792';
-      ctx.font = '13px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
-      ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 25);
-
-      // Convert to data URL
-      const dataURL = canvas.toDataURL('image/png');
-      resolve(dataURL);
-      }); // Close drawLogo().then()
-    } catch (error) {
-      console.error('Error generating image:', error);
-      resolve('');
-    }
-  });
-};
-
-// Download Modal Component
-const DownloadModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  standings: Standing[];
-  teams: Team[];
-  league: any;
-}> = ({ isOpen, onClose, standings, teams, league }) => {
-  const [imageData, setImageData] = useState<string>('');
-
-  React.useEffect(() => {
-    if (isOpen) {
-      generateStandingsImage(standings, teams, league).then(data => {
-        setImageData(data);
-      });
-    }
-  }, [isOpen, standings, teams, league]);
-
-  const handleDownload = () => {
-    if (!imageData) return;
-    
-    const link = document.createElement('a');
-    link.href = imageData;
-    link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleOpenInNewTab = () => {
-    if (!imageData) return;
-    const newWindow = window.open('', '_blank');
-    if (newWindow) {
-      newWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Klasemen SOQ.COMM PADEL LEAGUE</title>
-            <style>
-              body { margin: 0; padding: 20px; background: #f5fbfc; display: flex; flex-direction: column; align-items: center; }
-              img { max-width: 100%; height: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-              .buttons { margin-top: 20px; display: flex; gap: 10px; }
-              button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-              .download { background: #16B9C0; color: white; }
-              .close { background: #DCECEF; color: #173D4A; }
-            </style>
-          </head>
-          <body>
-            <img src="${imageData}" alt="Klasemen" />
-            <div class="buttons">
-              <button class="download" onclick="download()">💾 Download Gambar</button>
-              <button class="close" onclick="window.close()">✕ Tutup</button>
-            </div>
-            <script>
-              function download() {
-                const link = document.createElement('a');
-                link.href = '${imageData}';
-                link.download = 'SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png';
-                link.click();
-              }
-            </script>
-          </body>
-        </html>
-      `);
-      newWindow.document.close();
-    }
-  };
-
-  const handlePrint = () => {
-    if (!imageData) return;
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Print Klasemen</title>
-            <style>
-              @media print { body { margin: 0; } img { width: 100%; } }
-              body { margin: 0; padding: 20px; }
-              img { width: 100%; }
-            </style>
-          </head>
-          <body>
-            <img src="${imageData}" alt="Klasemen" onload="window.print()" />
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: 20,
-    }}>
-      <div style={{
-        background: C.surface,
-        borderRadius: 16,
-        maxWidth: 900,
-        width: '100%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-      }}>
-        {/* Header */}
+  render() {
+    if (this.state.hasError) {
+      return (
         <div style={{
-          padding: '20px 24px',
-          borderBottom: `1px solid ${C.border}`,
+          minHeight: '100vh',
+          background: C.bg,
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          position: 'sticky',
-          top: 0,
-          background: C.surface,
-          zIndex: 10,
+          justifyContent: 'center',
+          padding: 20,
         }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>
-            Download Klasemen
-          </h2>
-          <button onClick={onClose} style={{
-            background: 'none',
-            border: 'none',
-            fontSize: 24,
-            color: C.textSecondary,
-            cursor: 'pointer',
-            padding: 0,
-            lineHeight: 1,
-          }}>×</button>
-        </div>
-
-        {/* Content */}
-        <div style={{ padding: 24 }}>
-          {/* Preview */}
-          {imageData ? (
-            <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 13, color: C.textSecondary, marginBottom: 12 }}>Preview Klasemen:</p>
-              <div style={{
-                border: `2px solid ${C.border}`,
-                borderRadius: 8,
-                overflow: 'hidden',
-                background: C.bg,
-              }}>
-                <img 
-                  src={imageData} 
-                  alt="Preview Klasemen" 
-                  style={{ width: '100%', height: 'auto', display: 'block' }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <p style={{ color: C.textSecondary }}>Membuat gambar klasemen...</p>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-            <button
-              onClick={handleDownload}
-              disabled={!imageData}
-              style={{
-                padding: '14px 20px',
-                background: imageData ? C.primary : C.border,
-                color: '#fff',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 600,
-                border: 'none',
-                cursor: imageData ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-            >
-              💾 Download PNG
-            </button>
-
-            <button
-              onClick={handleOpenInNewTab}
-              disabled={!imageData}
-              style={{
-                padding: '14px 20px',
-                background: imageData ? C.secondary : C.border,
-                color: '#fff',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 600,
-                border: 'none',
-                cursor: imageData ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-            >
-              🔗 Buka di Tab Baru
-            </button>
-
-            <button
-              onClick={handlePrint}
-              disabled={!imageData}
-              style={{
-                padding: '14px 20px',
-                background: imageData ? C.accent : C.border,
-                color: '#fff',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 600,
-                border: 'none',
-                cursor: imageData ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-            >
-              🖨️ Print
-            </button>
-          </div>
-
-          {/* Info */}
           <div style={{
-            marginTop: 20,
-            padding: 16,
-            background: C.bg,
-            borderRadius: 8,
-            fontSize: 12,
-            color: C.textSecondary,
-            lineHeight: 1.6,
+            background: C.surface,
+            borderRadius: 12,
+            padding: 24,
+            maxWidth: 500,
+            textAlign: 'center',
+            border: `1px solid ${C.border}`,
           }}>
-            <strong style={{ color: C.textPrimary }}>Tips:</strong>
-            <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
-              <li><strong>Download PNG:</strong> Menyimpan gambar langsung ke perangkat Anda</li>
-              <li><strong>Buka di Tab Baru:</strong> Jika download tidak berfungsi, buka gambar di tab baru lalu klik kanan → Save Image As</li>
-              <li><strong>Print:</strong> Cetak klasemen langsung atau simpan sebagai PDF</li>
-            </ul>
+            <h1 style={{ color: C.error, fontSize: 20, marginBottom: 12 }}>Terjadi Kesalahan</h1>
+            <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 16 }}>
+              {this.state.error?.message || 'Aplikasi mengalami error'}
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px',
+                background: C.primary,
+                color: '#fff',
+                borderRadius: 8,
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Muat Ulang Aplikasi
+            </button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
+      );
+    }
 
-// App Component
-function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+    return this.props.children;
+  }
+}
+
+// Main App Component
+export default function App() {
+  const [currentPage, setCurrentPage] = useState('home');
   const [showAdmin, setShowAdmin] = useState(false);
-  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [, setRefresh] = useState(0);
 
-  const refresh = useCallback(() => setRefresh(r => r + 1), []);
+  const refresh = () => setRefresh(r => r + 1);
 
-  const handleNavigate = (page: Page) => {
+  // Initialize store
+  useEffect(() => {
+    const initStore = async () => {
+      try {
+        console.log('Initializing store...');
+        await store.init();
+        console.log('Store initialized successfully');
+        setLoading(false);
+      } catch (err: any) {
+        console.error('Error initializing store:', err);
+        setError(err.message || 'Gagal memuat data dari database');
+        setLoading(false);
+      }
+    };
+    
+    initStore();
+  }, []);
+
+  if (error) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: C.bg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}>
+        <div style={{
+          background: C.surface,
+          borderRadius: 12,
+          padding: 24,
+          maxWidth: 500,
+          textAlign: 'center',
+          border: `2px solid ${C.error}`,
+        }}>
+          <h1 style={{ color: C.error, fontSize: 20, marginBottom: 12 }}>⚠️ Error Koneksi Database</h1>
+          <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+            {error}
+          </p>
+          <p style={{ color: C.textSecondary, fontSize: 13, marginBottom: 20 }}>
+            Pastikan Supabase sudah dikonfigurasi dengan benar dan tabel database sudah dibuat.
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '12px 24px',
+              background: C.primary,
+              color: '#fff',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            🔄 Coba Lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: C.bg,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+      }}>
+        <Logo size="lg" />
+        <p style={{ color: C.textSecondary, fontSize: 14 }}>Memuat data dari cloud...</p>
+      </div>
+    );
+  }
+
+  const handleNavigate = (page: string) => {
     setCurrentPage(page);
-    setSelectedMatchId(null);
-    setSelectedTeamId(null);
     window.scrollTo(0, 0);
   };
 
-  const handleViewMatch = (matchId: string) => {
-    setSelectedMatchId(matchId);
-    setCurrentPage('match-detail' as Page);
-    window.scrollTo(0, 0);
-  };
-
-  const handleViewTeam = (teamId: string) => {
-    setSelectedTeamId(teamId);
-    setCurrentPage('team-detail' as Page);
-    window.scrollTo(0, 0);
-  };
-
-  const handleBack = () => {
-    setCurrentPage('home');
-    setSelectedMatchId(null);
-    setSelectedTeamId(null);
-  };
-
-  // Admin Panel
   if (showAdmin) {
     return <AdminView onExit={() => setShowAdmin(false)} onRefresh={refresh} />;
   }
 
+  const league = store.getLeague();
   const teams = store.getTeams();
+  const players = store.getPlayers();
   const matches = store.getMatches();
   const standings = store.getStandings();
   const matchdays = store.getMatchdays();
-  const pairs = store.getPairs();
-  const players = store.getPlayers();
-  const pairResults = store.getPairResults();
-  const league = store.getLeague();
+  const mvps = store.getMVPs();
 
-  const getTeam = (id: string) => teams.find(t => t.id === id);
-  const getMatchday = (id: string) => matchdays.find(md => md.id === id);
-
-  const navItems: { page: Page; label: string }[] = [
+  const navItems = [
     { page: 'home', label: 'Beranda' },
     { page: 'standings', label: 'Klasemen' },
     { page: 'schedule', label: 'Jadwal' },
     { page: 'results', label: 'Hasil' },
     { page: 'teams', label: 'Tim' },
-    { page: 'statistics', label: 'Statistik' },
-    { page: 'league-info', label: 'Info Liga' },
+    { page: 'players', label: 'Pemain' },
+    { page: 'mvp', label: 'MVP' },
   ];
 
   return (
+    <ErrorBoundary>
     <div style={{ minHeight: '100vh', background: C.bg }}>
       {/* Header */}
       <header style={{
-        background: C.surface, borderBottom: `1px solid ${C.border}`,
-        position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        background: C.surface,
+        borderBottom: `1px solid ${C.border}`,
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
       }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button onClick={() => handleNavigate('home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             <Logo size="sm" logoUrl={league.logo_url} />
           </button>
-          <nav style={{ display: 'flex', gap: 4 }} className="desktop-nav">
-            {navItems.slice(0, 5).map(item => (
-              <button key={item.page} onClick={() => handleNavigate(item.page)} style={{
-                padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
-                border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-                background: currentPage === item.page ? C.primary : 'transparent',
-                color: currentPage === item.page ? '#fff' : C.textPrimary,
-              }}>
+          <nav style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
+            {navItems.map(item => (
+              <button
+                key={item.page}
+                onClick={() => handleNavigate(item.page)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: currentPage === item.page ? C.primary : 'transparent',
+                  color: currentPage === item.page ? '#fff' : C.textPrimary,
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {item.label}
               </button>
             ))}
           </nav>
-          <button onClick={() => setShowAdmin(true)} style={{
-            padding: '8px 16px', background: C.primaryDark, color: '#fff',
-            borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
-          }}>
+          <button
+            onClick={() => setShowAdmin(true)}
+            style={{
+              padding: '8px 16px',
+              background: C.primaryDark,
+              color: '#fff',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
             Admin
           </button>
-        </div>
-        <div style={{ display: 'flex', overflowX: 'auto', padding: '0 16px 8px', gap: 4 }} className="mobile-nav scrollbar-hide">
-          {navItems.map(item => (
-            <button key={item.page} onClick={() => handleNavigate(item.page)} style={{
-              padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-              border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              background: currentPage === item.page ? C.primary : C.bg,
-              color: currentPage === item.page ? '#fff' : C.textSecondary,
-            }}>
-              {item.label}
-            </button>
-          ))}
         </div>
       </header>
 
       {/* Main Content */}
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px', minHeight: 'calc(100vh - 200px)' }}>
-        {currentPage === 'match-detail' && selectedMatchId && (
-          <MatchDetailView matchId={selectedMatchId} onBack={handleBack} onViewTeam={handleViewTeam} />
-        )}
-        {currentPage === 'team-detail' && selectedTeamId && (
-          <TeamDetailView teamId={selectedTeamId} onBack={handleBack} onViewMatch={handleViewMatch} />
-        )}
-        {currentPage === 'home' && !selectedMatchId && !selectedTeamId && (
-          <HomeView teams={teams} matches={matches} standings={standings} matchdays={matchdays} league={league}
-            onNavigate={handleNavigate} onViewMatch={handleViewMatch} onViewTeam={handleViewTeam} />
-        )}
-        {currentPage === 'standings' && !selectedMatchId && !selectedTeamId && (
-          <StandingsView teams={teams} standings={standings} league={league} onViewTeam={handleViewTeam} />
-        )}
-        {currentPage === 'schedule' && !selectedMatchId && !selectedTeamId && (
-          <ScheduleView teams={teams} matches={matches} matchdays={matchdays} onViewMatch={handleViewMatch} />
-        )}
-        {currentPage === 'results' && !selectedMatchId && !selectedTeamId && (
-          <ResultsView teams={teams} matches={matches} matchdays={matchdays} pairResults={pairResults} onViewMatch={handleViewMatch} />
-        )}
-        {currentPage === 'teams' && !selectedMatchId && !selectedTeamId && (
-          <TeamsView teams={teams} standings={standings} onViewTeam={handleViewTeam} />
-        )}
-        {currentPage === 'statistics' && !selectedMatchId && !selectedTeamId && (
-          <StatisticsView teams={teams} matches={matches} standings={standings} pairs={pairs} pairResults={pairResults} />
-        )}
-        {currentPage === 'league-info' && !selectedMatchId && !selectedTeamId && (
-          <LeagueInfoView league={league} teams={teams} matches={matches} />
-        )}
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
+        {currentPage === 'home' && <HomeView teams={teams} matches={matches} standings={standings} league={league} mvps={store.getMVPs()} players={players} onNavigate={handleNavigate} />}
+        {currentPage === 'standings' && <StandingsView teams={teams} standings={standings} league={league} />}
+        {currentPage === 'schedule' && <ScheduleView teams={teams} matches={matches} matchdays={matchdays} />}
+        {currentPage === 'results' && <ResultsView teams={teams} matches={matches} matchdays={matchdays} pairResults={store.getPairResults()} />}
+        {currentPage === 'teams' && <TeamsView teams={teams} standings={standings} />}
+        {currentPage === 'players' && <PlayersView teams={teams} players={players} />}
+        {currentPage === 'mvp' && <MVPView teams={teams} players={players} matchdays={matchdays} mvps={mvps} />}
       </main>
 
       {/* Footer */}
       <footer style={{ background: C.primaryDark, color: '#fff', padding: '24px 16px', marginTop: 40 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontWeight: 700, color: '#fff', fontSize: 14 }}>S</span>
-            </div>
-            <div>
-              <p style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>SOQ.COMM PADEL LEAGUE</p>
-              <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>One League. One Community. One Passion.</p>
-            </div>
-          </div>
-          <p style={{ fontSize: 11, opacity: 0.6, margin: 0 }}>© 2025 Papua Barat Daya, Indonesia</p>
+        <div style={{ maxWidth: 1200, margin: '0 auto', textAlign: 'center' }}>
+          <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 4px' }}>SOQ.COMM PADEL LEAGUE</p>
+          <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>© 2025 Papua Barat Daya, Indonesia</p>
         </div>
       </footer>
-
-      <style>{`
-        .desktop-nav { display: flex; }
-        .mobile-nav { display: none; }
-        @media (max-width: 768px) {
-          .desktop-nav { display: none !important; }
-          .mobile-nav { display: flex !important; }
-        }
-      `}</style>
     </div>
+    </ErrorBoundary>
   );
 }
 
-// ============ HOME VIEW ============
-const HomeView: React.FC<{
-  teams: Team[]; matches: Match[]; standings: Standing[]; matchdays: Matchday[]; league: any;
-  onNavigate: (p: Page) => void; onViewMatch: (id: string) => void; onViewTeam: (id: string) => void;
-}> = ({ teams, matches, standings, matchdays, league, onNavigate, onViewMatch, onViewTeam }) => {
-  const getTeam = (id: string) => teams.find(t => t.id === id);
-  const getMatchday = (id: string) => matchdays.find(md => md.id === id);
+// Home View
+const HomeView: React.FC<{ teams: any[]; matches: any[]; standings: any[]; league: any; mvps: any[]; players: any[]; onNavigate: (page: string) => void }> = ({ teams, matches, standings, league, mvps, players, onNavigate }) => {
   const completedMatches = matches.filter(m => m.status === 'completed');
   const upcomingMatches = matches.filter(m => m.status === 'upcoming');
-  const nextMatch = upcomingMatches[0];
-  const recentResults = completedMatches.slice(-4).reverse();
-  const topStandings = standings.slice(0, 5);
+  const latestMvp = mvps.length > 0 ? mvps[0] : null;
+  const mvpPlayer = latestMvp ? players.find((p: any) => p.id === latestMvp.player_id) : null;
+  const mvpTeam = mvpPlayer ? teams.find((t: any) => t.id === mvpPlayer.team_id) : null;
 
   return (
-    <div className="animate-fade-in">
-      {/* Hero */}
+    <div>
       <section style={{
-        background: `linear-gradient(135deg, ${C.bg}, #fff, #E8F8F9)`,
-        borderRadius: 16, padding: '40px 24px', marginBottom: 24, position: 'relative', overflow: 'hidden',
+        background: `linear-gradient(135deg, ${C.bg}, #fff)`,
+        borderRadius: 16,
+        padding: '40px 24px',
+        marginBottom: 24,
+        textAlign: 'center',
       }}>
-        <div style={{ position: 'absolute', top: 20, right: 20, width: 200, height: 200, borderRadius: '50%', background: `${C.primary}10`, filter: 'blur(40px)' }} />
-        <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: `${C.primary}15`, borderRadius: 20, marginBottom: 16 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.primary }} className="animate-pulse-soft" />
-            <span style={{ fontSize: 11, fontWeight: 600, color: C.primaryDark }}>
-              {league.status === 'ongoing' ? 'Kompetisi Berlangsung' : league.status === 'upcoming' ? 'Segera Dimulai' : 'Selesai'}
-            </span>
-          </div>
-          <h1 style={{ fontSize: 'clamp(24px, 5vw, 42px)', fontWeight: 800, color: C.textPrimary, fontFamily: 'Montserrat, sans-serif', margin: '0 0 8px' }}>
-            SOQ.COMM<br /><span style={{ color: C.primary }}>PADEL LEAGUE</span>
-          </h1>
-          <p style={{ color: C.textSecondary, fontSize: 14, fontStyle: 'italic', margin: '0 0 4px' }}>One League. One Community. One Passion.</p>
-          <p style={{ color: C.textSecondary, fontSize: 13, margin: '0 0 24px', maxWidth: 500, marginLeft: 'auto', marginRight: 'auto' }}>
-            {league.description}
-          </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => onNavigate('standings')} style={{
-              padding: '12px 24px', background: C.primary, color: '#fff', borderRadius: 12,
-              fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer',
-              boxShadow: `0 4px 12px ${C.primary}30`,
-            }}>Lihat Klasemen</button>
-            <button onClick={() => onNavigate('schedule')} style={{
-              padding: '12px 24px', background: '#fff', color: C.primary, borderRadius: 12,
-              fontWeight: 600, fontSize: 13, border: `2px solid ${C.primary}`, cursor: 'pointer',
-            }}>Jadwal Pertandingan</button>
-          </div>
+        <h1 style={{ fontSize: 32, fontWeight: 800, color: C.textPrimary, margin: '0 0 8px' }}>
+          SOQ.COMM <span style={{ color: C.primary }}>PADEL LEAGUE</span>
+        </h1>
+        <p style={{ color: C.textSecondary, fontSize: 14, margin: '0 0 24px' }}>
+          {league.description}
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => onNavigate('standings')} style={{
+            padding: '12px 24px',
+            background: C.primary,
+            color: '#fff',
+            borderRadius: 12,
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+          }}>
+            Lihat Klasemen
+          </button>
+          <button onClick={() => onNavigate('schedule')} style={{
+            padding: '12px 24px',
+            background: '#fff',
+            color: C.primary,
+            borderRadius: 12,
+            fontWeight: 600,
+            border: `2px solid ${C.primary}`,
+            cursor: 'pointer',
+          }}>
+            Jadwal Pertandingan
+          </button>
         </div>
       </section>
 
-      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'Total Tim', value: teams.length, color: C.primary },
-          { label: 'Total Pertandingan', value: matches.length, color: C.secondary },
+          { label: 'Pertandingan', value: matches.length, color: C.secondary },
           { label: 'Selesai', value: completedMatches.length, color: C.success },
           { label: 'Mendatang', value: upcomingMatches.length, color: C.warning },
-        ].map((s, i) => (
+        ].map((stat, i) => (
           <div key={i} style={{ background: C.surface, borderRadius: 12, padding: 16, border: `1px solid ${C.border}` }}>
-            <p style={{ fontSize: 24, fontWeight: 700, color: s.color, fontFamily: 'Montserrat, sans-serif', margin: 0 }}>{s.value}</p>
-            <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0' }}>{s.label}</p>
+            <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
+            <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0' }}>{stat.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Next Match */}
-      {nextMatch && (
+      {standings.length > 0 && (
         <section style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>Pertandingan Berikutnya</h2>
-            <button onClick={() => onNavigate('schedule')} style={{ fontSize: 12, color: C.primary, fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>Lihat Semua →</button>
-          </div>
-          <div style={{ background: C.surface, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ padding: '2px 8px', background: `${C.primary}15`, color: C.primaryDark, fontSize: 11, fontWeight: 500, borderRadius: 12 }}>{getMatchday(nextMatch.matchday_id)?.name}</span>
-              <span style={{ padding: '2px 8px', background: `${C.accent}30`, color: '#5a7a18', fontSize: 11, fontWeight: 500, borderRadius: 12 }}>Akan Datang</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 16 }}>
-                  {getTeam(nextMatch.team_a_id)?.name.charAt(0)}
-                </div>
-                <p style={{ fontWeight: 600, fontSize: 13, color: C.textPrimary, margin: 0 }}>{getTeam(nextMatch.team_a_id)?.name}</p>
-              </div>
-              <div style={{ textAlign: 'center', padding: '0 12px' }}>
-                <p style={{ fontSize: 20, fontWeight: 700, color: C.textSecondary, margin: 0 }}>VS</p>
-                <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0' }}>Court {nextMatch.court}</p>
-              </div>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: `linear-gradient(135deg, ${C.highlight}, #e06040)`, margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 16 }}>
-                  {getTeam(nextMatch.team_b_id)?.name.charAt(0)}
-                </div>
-                <p style={{ fontWeight: 600, fontSize: 13, color: C.textPrimary, margin: 0 }}>{getTeam(nextMatch.team_b_id)?.name}</p>
-              </div>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: C.textSecondary }}>
-              {getMatchday(nextMatch.matchday_id)?.date} • {nextMatch.start_time} - {nextMatch.end_time}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Recent Results */}
-      {recentResults.length > 0 && (
-        <section style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>Hasil Terbaru</h2>
-            <button onClick={() => onNavigate('results')} style={{ fontSize: 12, color: C.primary, fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>Lihat Semua →</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-            {recentResults.map(match => (
-              <div key={match.id} onClick={() => onViewMatch(match.id)} style={{
-                background: C.surface, borderRadius: 12, padding: 16, border: `1px solid ${C.border}`, cursor: 'pointer', transition: 'all 0.2s',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, color: C.textSecondary }}>{getMatchday(match.matchday_id)?.name}</span>
-                  <span style={{ padding: '2px 8px', background: `${C.success}15`, color: C.success, fontSize: 11, fontWeight: 500, borderRadius: 12 }}>Selesai</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <p style={{ flex: 1, fontWeight: 600, fontSize: 13, color: match.winner_team_id === match.team_a_id ? C.primary : C.textPrimary, margin: 0 }}>{getTeam(match.team_a_id)?.name}</p>
-                  <span style={{ padding: '4px 8px', background: C.bg, borderRadius: 8, fontSize: 12, fontWeight: 700, color: C.textPrimary }}>
-                    {match.winner_team_id === match.team_a_id ? 'WIN' : match.winner_team_id === match.team_b_id ? 'LOSS' : 'DRAW'}
-                  </span>
-                  <p style={{ flex: 1, fontWeight: 600, fontSize: 13, color: match.winner_team_id === match.team_b_id ? C.primary : C.textPrimary, margin: 0, textAlign: 'right' }}>{getTeam(match.team_b_id)?.name}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Top Standings */}
-      {topStandings.length > 0 && (
-        <section style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>Klasemen Sementara</h2>
-            <button onClick={() => onNavigate('standings')} style={{ fontSize: 12, color: C.primary, fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>Klasemen Lengkap →</button>
-          </div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>Klasemen Sementara</h2>
           <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
             <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: C.primaryDark, color: '#fff' }}>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Pos</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Tim</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Main</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Total Poin</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Poin</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Pos</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Tim</th>
+                  <th style={{ padding: 10, textAlign: 'center' }}>Main</th>
+                  <th style={{ padding: 10, textAlign: 'center' }}>Poin</th>
                 </tr>
               </thead>
               <tbody>
-                {topStandings.map((s: Standing, idx: number) => (
-                  <tr key={s.team_id} onClick={() => onViewTeam(s.team_id)} style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer', background: idx === 0 ? `${C.accent}15` : 'transparent' }}>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{
-                        width: 24, height: 24, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 11, fontWeight: 700,
-                        background: idx === 0 ? C.accent : idx === 1 ? C.primary : idx === 2 ? C.secondary : C.border,
-                        color: idx < 3 ? '#fff' : C.textSecondary,
-                      }}>{idx + 1}</span>
-                    </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 500, color: C.textPrimary }}>{getTeam(s.team_id)?.name}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', color: C.textSecondary }}>{s.played}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: C.primaryDark }}>{s.total_points}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: C.primaryDark }}>{s.total_points}</td>
-                  </tr>
-                ))}
+                {standings.slice(0, 5).map((s: any, idx: number) => {
+                  const team = teams.find(t => t.id === s.team_id);
+                  return (
+                    <tr key={s.team_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: 10 }}>{idx + 1}</td>
+                      <td style={{ padding: 10, fontWeight: 500 }}>{team?.name}</td>
+                      <td style={{ padding: 10, textAlign: 'center' }}>{s.played}</td>
+                      <td style={{ padding: 10, textAlign: 'center', fontWeight: 700 }}>{s.total_points}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </section>
       )}
+
+      {/* Player MVP Section */}
+      <section style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>🏆 PLAYER MVP</h2>
+        {latestMvp && mvpPlayer ? (
+          <div style={{
+            background: `linear-gradient(135deg, ${C.accent}10, ${C.success}10)`,
+            borderRadius: 16,
+            padding: 24,
+            border: `2px solid ${C.accent}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 24,
+            flexWrap: 'wrap',
+          }}>
+            {mvpPlayer.photo_url ? (
+              <img 
+                src={mvpPlayer.photo_url} 
+                alt={mvpPlayer.name} 
+                style={{ 
+                  width: 120, 
+                  height: 120, 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  border: `4px solid ${C.accent}`,
+                  boxShadow: '0 4px 12px rgba(168, 216, 46, 0.3)',
+                }} 
+              />
+            ) : (
+              <div style={{
+                width: 120,
+                height: 120,
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 48,
+                border: `4px solid ${C.accent}`,
+                boxShadow: '0 4px 12px rgba(168, 216, 46, 0.3)',
+              }}>
+                {mvpPlayer.name.charAt(0)}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{
+                display: 'inline-block',
+                padding: '4px 12px',
+                background: C.accent,
+                color: '#fff',
+                borderRadius: 12,
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}>
+                🏆 MOST VALUABLE PLAYER
+              </div>
+              <h3 style={{ fontSize: 24, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>
+                {mvpPlayer.name}
+              </h3>
+              {mvpTeam && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  {mvpTeam.logo_url ? (
+                    <img 
+                      src={mvpTeam.logo_url} 
+                      alt={mvpTeam.name} 
+                      style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} 
+                    />
+                  ) : (
+                    <div style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: 10,
+                    }}>
+                      {mvpTeam.name.charAt(0)}
+                    </div>
+                  )}
+                  <span style={{ fontSize: 14, color: C.textSecondary, fontWeight: 500 }}>
+                    {mvpTeam.name}
+                  </span>
+                </div>
+              )}
+              {latestMvp.reason && (
+                <p style={{ fontSize: 13, color: C.textSecondary, margin: '8px 0 0', fontStyle: 'italic' }}>
+                  "{latestMvp.reason}"
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: C.surface,
+            borderRadius: 12,
+            padding: 40,
+            border: `1px solid ${C.border}`,
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
+            <p style={{ color: C.textSecondary, fontSize: 14, margin: 0 }}>
+              Player MVP akan diumumkan setelah pertandingan berlangsung.
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   );
 };
 
-// ============ STANDINGS VIEW ============
-const StandingsView: React.FC<{ teams: Team[]; standings: Standing[]; league: any; onViewTeam: (id: string) => void }> = ({ teams, standings, league, onViewTeam }) => {
-  const getTeam = (id: string) => teams.find(t => t.id === id);
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
+// Standings View
+// Generate klasemen image for download
+const generateStandingsImage = (standings: any[], teams: any[], league: any): string => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
 
-  return (
-    <div className="animate-fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>Klasemen Liga</h1>
-        <button 
-          onClick={() => setShowDownloadModal(true)}
-          style={{
-            padding: '8px 16px', 
-            background: C.primary, 
-            color: '#fff', 
-            borderRadius: 8, 
-            fontSize: 12, 
-            fontWeight: 600, 
-            border: 'none', 
-            cursor: 'pointer',
-          }}
-        >
-          ⬇ Download Klasemen
-        </button>
-      </div>
+  const width = 1200;
+  const rowHeight = 60;
+  const headerHeight = 180;
+  const height = headerHeight + (standings.length * rowHeight) + 100;
+  
+  canvas.width = width;
+  canvas.height = height;
 
-      {/* Download Modal */}
-      <DownloadModal
-        isOpen={showDownloadModal}
-        onClose={() => setShowDownloadModal(false)}
-        standings={standings}
-        teams={teams}
-        league={league}
-      />
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 700 }}>
-            <thead>
-              <tr style={{ background: C.primaryDark, color: '#fff' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Pos</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Logo</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Tim</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Main</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Total Poin</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Pasangan Menang</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Pasangan Kalah</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>Selisih</th>
-              </tr>
-            </thead>
-            <tbody>
-              {standings.map((s: Standing, idx: number) => {
-                const team = getTeam(s.team_id);
-                return (
-                  <tr key={s.team_id} onClick={() => onViewTeam(s.team_id)} style={{
-                    borderBottom: `1px solid ${C.border}`, cursor: 'pointer', transition: 'background 0.2s',
-                    background: idx === 0 ? `${C.accent}15` : idx === 1 ? `${C.primary}10` : 'transparent',
-                    borderLeft: idx < 3 ? `4px solid ${idx === 0 ? C.accent : idx === 1 ? C.primary : C.secondary}` : 'none',
-                  }}>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{
-                        width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700,
-                        background: idx === 0 ? C.accent : idx === 1 ? C.primary : idx === 2 ? C.secondary : C.border,
-                        color: idx < 3 ? '#fff' : C.textSecondary,
-                      }}>{idx + 1}</span>
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      {team?.logo_url ? (
-                        <img src={team.logo_url} alt={team.name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>
-                          {team?.name.charAt(0)}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px', fontWeight: 500, color: C.textPrimary }}>{team?.name}</td>
-                    <td style={{ padding: '12px', textAlign: 'center', color: C.textSecondary }}>{s.played}</td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, background: `${C.primary}15`, color: C.primaryDark, fontWeight: 700 }}>{s.total_points}</span>
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center', color: C.success, fontWeight: 600 }}>{s.pair_wins}</td>
-                    <td style={{ padding: '12px', textAlign: 'center', color: C.error, fontWeight: 600 }}>{s.pair_losses}</td>
-                    <td style={{ padding: '12px', textAlign: 'center', fontWeight: 500, color: C.textPrimary }}>{s.pair_difference > 0 ? '+' : ''}{s.pair_difference}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {/* Legend */}
-      <div style={{ background: C.surface, borderRadius: 12, padding: 16, border: `1px solid ${C.border}`, marginTop: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>Sistem Perhitungan Klasemen</h3>
-        <p style={{ fontSize: 12, color: C.textSecondary, margin: 0, lineHeight: 1.6 }}>
-          Klasemen dihitung berdasarkan <strong>total poin dari semua partai pasangan</strong> dalam pertandingan beregu yang telah disahkan. Setiap partai memberikan poin sesuai jumlah game yang diperoleh.
-        </p>
-      </div>
-    </div>
-  );
+  // Background
+  ctx.fillStyle = '#F5FBFC';
+  ctx.fillRect(0, 0, width, height);
+
+  // Header gradient
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, '#087E91');
+  gradient.addColorStop(1, '#16B9C0');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, headerHeight);
+
+  // Logo
+  if (league.logo_url) {
+    const logoImg = new Image();
+    logoImg.src = league.logo_url;
+    try {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(80, 90, 40, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(logoImg, 40, 50, 80, 80);
+      ctx.restore();
+    } catch (e) {
+      ctx.beginPath();
+      ctx.arc(80, 90, 40, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 32px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('S', 80, 90);
+    }
+  } else {
+    ctx.beginPath();
+    ctx.arc(80, 90, 40, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('S', 80, 90);
+  }
+
+  // Title
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 28px Arial';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('KLASEMEN LIGA PADEL', 140, 80);
+  ctx.font = '16px Arial';
+  ctx.fillText(`${league.name} • Season ${league.season}`, 140, 105);
+  ctx.font = '14px Arial';
+  ctx.fillText(`Diperbarui: ${new Date().toLocaleDateString('id-ID')}`, 140, 130);
+
+  // Table header
+  const tableTop = headerHeight + 20;
+  ctx.fillStyle = '#087E91';
+  ctx.fillRect(40, tableTop, width - 80, 40);
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const cols = ['Pos', 'Tim', 'Main', 'Total Poin', 'Menang', 'Kalah', 'Selisih'];
+  const colWidths = [60, 300, 80, 120, 100, 100, 100];
+  let x = 40;
+  cols.forEach((col, i) => {
+    ctx.fillText(col, x + colWidths[i] / 2, tableTop + 20);
+    x += colWidths[i];
+  });
+
+  // Table rows
+  standings.forEach((s, idx) => {
+    const team = teams.find(t => t.id === s.team_id);
+    const y = tableTop + 40 + (idx * rowHeight);
+    
+    // Row background
+    if (idx === 0) {
+      ctx.fillStyle = 'rgba(168, 216, 46, 0.15)';
+      ctx.fillRect(40, y, width - 80, rowHeight);
+    } else if (idx % 2 === 0) {
+      ctx.fillStyle = 'rgba(220, 236, 223, 0.3)';
+      ctx.fillRect(40, y, width - 80, rowHeight);
+    }
+
+    // Position badge
+    ctx.beginPath();
+    ctx.arc(70, y + rowHeight / 2, 16, 0, Math.PI * 2);
+    ctx.fillStyle = idx === 0 ? '#A8D82E' : idx === 1 ? '#16B9C0' : idx === 2 ? '#1599B8' : '#DCECEF';
+    ctx.fill();
+    ctx.fillStyle = idx < 3 ? '#fff' : '#718792';
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(idx + 1), 70, y + rowHeight / 2);
+
+    // Team logo or placeholder
+    if (team?.logo_url) {
+      const teamImg = new Image();
+      teamImg.src = team.logo_url;
+      try {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(130, y + rowHeight / 2, 18, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(teamImg, 112, y + rowHeight / 2 - 18, 36, 36);
+        ctx.restore();
+      } catch (e) {
+        ctx.beginPath();
+        ctx.arc(130, y + rowHeight / 2, 18, 0, Math.PI * 2);
+        ctx.fillStyle = '#16B9C0';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(team?.name.charAt(0) || '?', 130, y + rowHeight / 2);
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(130, y + rowHeight / 2, 18, 0, Math.PI * 2);
+      ctx.fillStyle = '#16B9C0';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText(team?.name.charAt(0) || '?', 130, y + rowHeight / 2);
+    }
+
+    // Team name
+    ctx.fillStyle = '#173D4A';
+    ctx.font = '500 13px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(team?.name || 'Unknown', 160, y + rowHeight / 2);
+
+    // Stats
+    ctx.textAlign = 'center';
+    ctx.font = '13px Arial';
+    ctx.fillStyle = '#173D4A';
+    x = 40 + colWidths[0] + colWidths[1];
+    ctx.fillText(String(s.played), x + colWidths[2] / 2, y + rowHeight / 2);
+    x += colWidths[2];
+    ctx.font = 'bold 13px Arial';
+    ctx.fillStyle = '#087E91';
+    ctx.fillText(String(s.total_points), x + colWidths[3] / 2, y + rowHeight / 2);
+    x += colWidths[3];
+    ctx.font = '13px Arial';
+    ctx.fillStyle = '#2EAD72';
+    ctx.fillText(String(s.pair_wins), x + colWidths[4] / 2, y + rowHeight / 2);
+    x += colWidths[4];
+    ctx.fillStyle = '#E65C5C';
+    ctx.fillText(String(s.pair_losses), x + colWidths[5] / 2, y + rowHeight / 2);
+    x += colWidths[5];
+    ctx.fillStyle = '#173D4A';
+    ctx.fillText(`${s.pair_difference > 0 ? '+' : ''}${s.pair_difference}`, x + colWidths[6] / 2, y + rowHeight / 2);
+  });
+
+  // Footer
+  const footerY = tableTop + 40 + (standings.length * rowHeight) + 30;
+  ctx.fillStyle = '#718792';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Klasemen dihitung berdasarkan akumulasi total poin dari seluruh partai pasangan dalam pertandingan yang telah disahkan.', width / 2, footerY);
+  ctx.fillText('© 2025 SOQ.COMM PADEL LEAGUE - Papua Barat Daya, Indonesia', width / 2, footerY + 20);
+
+  return canvas.toDataURL('image/png');
 };
 
-// ============ SCHEDULE VIEW ============
-const ScheduleView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchday[]; onViewMatch: (id: string) => void }> = ({ teams, matches, matchdays, onViewMatch }) => {
-  const getTeam = (id: string) => teams.find(t => t.id === id);
-  const getMatchday = (id: string) => matchdays.find(md => md.id === id);
-  const [filter, setFilter] = useState<'all' | 'upcoming' | 'ongoing' | 'completed'>('all');
-
-  const filteredMatches = matches.filter(m => filter === 'all' || m.status === filter);
-  const grouped = filteredMatches.reduce((acc: Record<string, Match[]>, m) => {
-    if (!acc[m.matchday_id]) acc[m.matchday_id] = [];
-    acc[m.matchday_id].push(m);
-    return acc;
-  }, {});
-
-  const statusColors: Record<string, { bg: string; text: string; label: string }> = {
-    upcoming: { bg: `${C.secondary}15`, text: C.secondary, label: 'Akan Datang' },
-    ongoing: { bg: `${C.highlight}15`, text: C.highlight, label: 'Berlangsung' },
-    completed: { bg: `${C.success}15`, text: C.success, label: 'Selesai' },
-    cancelled: { bg: `${C.error}15`, text: C.error, label: 'Dibatalkan' },
+const StandingsView: React.FC<{ teams: any[]; standings: any[]; league: any }> = ({ teams, standings, league }) => {
+  const handleDownload = () => {
+    const imageData = generateStandingsImage(standings, teams, league);
+    const link = document.createElement('a');
+    link.download = `SOQ-COMM-PADEL-LEAGUE-KLASEMEN-${league.season}.png`;
+    link.href = imageData;
+    link.click();
   };
 
   return (
-    <div className="animate-fade-in">
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', fontFamily: 'Montserrat, sans-serif' }}>Jadwal Pertandingan</h1>
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {(['all', 'upcoming', 'ongoing', 'completed'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{
-            padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-            background: filter === f ? C.primary : C.bg, color: filter === f ? '#fff' : C.textSecondary,
-          }}>{f === 'all' ? 'Semua' : f === 'upcoming' ? 'Akan Datang' : f === 'ongoing' ? 'Berlangsung' : 'Selesai'}</button>
-        ))}
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: 0 }}>Klasemen Liga</h1>
+        <button
+          onClick={handleDownload}
+          style={{
+            padding: '10px 20px',
+            background: C.primary,
+            color: '#fff',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+        >
+          ⬇ Download Klasemen PNG
+        </button>
       </div>
-      {/* Matches */}
-      {Object.entries(grouped).map(([mdId, mdMatches]) => {
-        const md = getMatchday(mdId);
+      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'auto' }}>
+        <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 700 }}>
+          <thead>
+            <tr style={{ background: C.primaryDark, color: '#fff' }}>
+              <th style={{ padding: 10, textAlign: 'left' }}>Pos</th>
+              <th style={{ padding: 10, textAlign: 'left' }}>Tim</th>
+              <th style={{ padding: 10, textAlign: 'center' }}>Main</th>
+              <th style={{ padding: 10, textAlign: 'center' }}>Total Poin</th>
+              <th style={{ padding: 10, textAlign: 'center' }}>Menang</th>
+              <th style={{ padding: 10, textAlign: 'center' }}>Kalah</th>
+              <th style={{ padding: 10, textAlign: 'center' }}>Selisih</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((s: any, idx: number) => {
+              const team = teams.find(t => t.id === s.team_id);
+              return (
+                <tr key={s.team_id} style={{ borderBottom: `1px solid ${C.border}`, background: idx === 0 ? `${C.accent}15` : 'transparent' }}>
+                  <td style={{ padding: 10 }}>
+                    <span style={{
+                      width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, fontWeight: 700,
+                      background: idx === 0 ? C.accent : idx === 1 ? C.primary : idx === 2 ? C.secondary : C.border,
+                      color: idx < 3 ? '#fff' : C.textSecondary,
+                    }}>{idx + 1}</span>
+                  </td>
+                  <td style={{ padding: 10, fontWeight: 500 }}>{team?.name}</td>
+                  <td style={{ padding: 10, textAlign: 'center' }}>{s.played}</td>
+                  <td style={{ padding: 10, textAlign: 'center', fontWeight: 700, color: C.primaryDark }}>{s.total_points}</td>
+                  <td style={{ padding: 10, textAlign: 'center', color: C.success }}>{s.pair_wins}</td>
+                  <td style={{ padding: 10, textAlign: 'center', color: C.error }}>{s.pair_losses}</td>
+                  <td style={{ padding: 10, textAlign: 'center' }}>{s.pair_difference > 0 ? '+' : ''}{s.pair_difference}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// Schedule View
+const ScheduleView: React.FC<{ teams: any[]; matches: any[]; matchdays: any[] }> = ({ teams, matches, matchdays }) => {
+  const getTeam = (id: string) => teams.find(t => t.id === id);
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Jadwal Pertandingan</h1>
+      {matchdays.map((md: any) => {
+        const mdMatches = matches.filter(m => m.matchday_id === md.id);
+        if (mdMatches.length === 0) return null;
         return (
-          <div key={mdId} style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ padding: '4px 12px', background: C.primaryDark, color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 12 }}>{md?.name}</span>
-              <span style={{ fontSize: 11, color: C.textSecondary }}>{md?.date}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-              {mdMatches.map(match => {
-                const sc = statusColors[match.status] || statusColors.upcoming;
-                return (
-                  <div key={match.id} onClick={() => onViewMatch(match.id)} style={{
-                    background: C.surface, borderRadius: 12, padding: 16, border: `1px solid ${C.border}`, cursor: 'pointer', transition: 'all 0.2s',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <span style={{ padding: '2px 8px', background: sc.bg, color: sc.text, fontSize: 11, fontWeight: 500, borderRadius: 12 }}>{sc.label}</span>
-                      <span style={{ fontSize: 11, color: C.textSecondary }}>Court {match.court}</span>
+          <div key={md.id} style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: '0 0 10px' }}>
+              {md.name} - {md.date}
+            </h3>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {mdMatches.map((match: any) => (
+                <div key={match.id} style={{ background: C.surface, borderRadius: 10, padding: 12, border: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 600, margin: 0 }}>{getTeam(match.team_a_id)?.name}</p>
+                      <p style={{ fontSize: 11, color: C.textSecondary, margin: '2px 0' }}>vs</p>
+                      <p style={{ fontWeight: 600, margin: 0 }}>{getTeam(match.team_b_id)?.name}</p>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
-                            {getTeam(match.team_a_id)?.name.charAt(0)}
-                          </div>
-                          <span style={{ fontWeight: 500, fontSize: 13, color: C.textPrimary }}>{getTeam(match.team_a_id)?.name}</span>
-                        </div>
-                      </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, padding: '0 8px' }}>VS</span>
-                      <div style={{ flex: 1, textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                          <span style={{ fontWeight: 500, fontSize: 13, color: C.textPrimary }}>{getTeam(match.team_b_id)?.name}</span>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg, ${C.highlight}, #e06040)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
-                            {getTeam(match.team_b_id)?.name.charAt(0)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: C.textSecondary }}>
-                      {match.start_time} - {match.end_time}
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>Court {match.court}</p>
+                      <p style={{ fontSize: 12, color: C.textSecondary, margin: '2px 0' }}>{match.start_time}</p>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         );
@@ -1046,65 +811,44 @@ const ScheduleView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Match
   );
 };
 
-// ============ RESULTS VIEW ============
-const ResultsView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchday[]; pairResults: PairMatchResult[]; onViewMatch: (id: string) => void }> = ({ teams, matches, matchdays, pairResults, onViewMatch }) => {
+// Results View
+const ResultsView: React.FC<{ teams: any[]; matches: any[]; matchdays: any[]; pairResults: any[] }> = ({ teams, matches, matchdays, pairResults }) => {
   const getTeam = (id: string) => teams.find(t => t.id === id);
   const getMatchday = (id: string) => matchdays.find(md => md.id === id);
   const completedMatches = matches.filter(m => m.status === 'completed').reverse();
 
   return (
-    <div className="animate-fade-in">
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', fontFamily: 'Montserrat, sans-serif' }}>Hasil Pertandingan</h1>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Hasil Pertandingan</h1>
       {completedMatches.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <p style={{ color: C.textSecondary }}>Belum ada hasil pertandingan.</p>
-        </div>
+        <p style={{ color: C.textSecondary, textAlign: 'center', padding: 40 }}>Belum ada hasil pertandingan.</p>
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
-          {completedMatches.map(match => {
-            const md = getMatchday(match.matchday_id);
+          {completedMatches.map((match: any) => {
             const results = pairResults.filter(r => r.match_id === match.id);
-            const aPoints = results.reduce((sum, r) => sum + r.score_team_a, 0);
-            const bPoints = results.reduce((sum, r) => sum + r.score_team_b, 0);
+            const aPoints = results.reduce((sum: number, r: any) => sum + r.score_team_a, 0);
+            const bPoints = results.reduce((sum: number, r: any) => sum + r.score_team_b, 0);
             return (
-              <div key={match.id} onClick={() => onViewMatch(match.id)} style={{
-                background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', cursor: 'pointer',
-              }}>
-                <div style={{ padding: '8px 16px', background: C.bg, borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: C.primaryDark }}>{md?.name} • {md?.date}</span>
-                  <span style={{ fontSize: 11, color: C.textSecondary }}>Court {match.court} • {match.start_time}</span>
-                </div>
-                <div style={{ padding: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 600, fontSize: 13, color: match.winner_team_id === match.team_a_id ? C.primary : C.textPrimary, margin: 0 }}>{getTeam(match.team_a_id)?.name}</p>
-                      {match.winner_team_id === match.team_a_id && <span style={{ fontSize: 10, color: C.success, fontWeight: 500 }}>PEMENANG</span>}
-                    </div>
-                    <div style={{ padding: '0 16px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 22, fontWeight: 700, color: C.textPrimary, fontFamily: 'Montserrat, sans-serif' }}>{aPoints}</span>
-                      <span style={{ fontSize: 14, color: C.textSecondary, margin: '0 4px' }}>-</span>
-                      <span style={{ fontSize: 22, fontWeight: 700, color: C.textPrimary, fontFamily: 'Montserrat, sans-serif' }}>{bPoints}</span>
-                      <p style={{ fontSize: 10, color: C.textSecondary, margin: '2px 0 0' }}>Total Poin</p>
-                    </div>
-                    <div style={{ flex: 1, textAlign: 'right' }}>
-                      <p style={{ fontWeight: 600, fontSize: 13, color: match.winner_team_id === match.team_b_id ? C.primary : C.textPrimary, margin: 0 }}>{getTeam(match.team_b_id)?.name}</p>
-                      {match.winner_team_id === match.team_b_id && <span style={{ fontSize: 10, color: C.success, fontWeight: 500 }}>PEMENANG</span>}
-                    </div>
+              <div key={match.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 8px' }}>
+                  {getMatchday(match.matchday_id)?.name} • {getMatchday(match.matchday_id)?.date}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 600, margin: 0, color: match.winner_team_id === match.team_a_id ? C.primary : C.textPrimary }}>
+                      {getTeam(match.team_a_id)?.name}
+                    </p>
                   </div>
-                  {results.length > 0 && (
-                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 8 }}>
-                      {results.map(r => (
-                        <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, padding: '2px 0' }}>
-                          <span style={{ color: C.textSecondary }}>Pasangan {r.position}</span>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <span style={{ fontWeight: 600, color: r.winner_team_id === match.team_a_id ? C.success : C.textSecondary }}>{r.score_team_a}</span>
-                            <span style={{ color: C.border }}>-</span>
-                            <span style={{ fontWeight: 600, color: r.winner_team_id === match.team_b_id ? C.success : C.textSecondary }}>{r.score_team_b}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ padding: '0 16px', textAlign: 'center' }}>
+                    <span style={{ fontSize: 22, fontWeight: 700 }}>{aPoints}</span>
+                    <span style={{ fontSize: 14, color: C.textSecondary, margin: '0 4px' }}>-</span>
+                    <span style={{ fontSize: 22, fontWeight: 700 }}>{bPoints}</span>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'right' }}>
+                    <p style={{ fontWeight: 600, margin: 0, color: match.winner_team_id === match.team_b_id ? C.primary : C.textPrimary }}>
+                      {getTeam(match.team_b_id)?.name}
+                    </p>
+                  </div>
                 </div>
               </div>
             );
@@ -1115,60 +859,39 @@ const ResultsView: React.FC<{ teams: Team[]; matches: Match[]; matchdays: Matchd
   );
 };
 
-// ============ TEAMS VIEW ============
-const TeamsView: React.FC<{ teams: Team[]; standings: Standing[]; onViewTeam: (id: string) => void }> = ({ teams, standings, onViewTeam }) => {
+// Teams View
+const TeamsView: React.FC<{ teams: any[]; standings: any[] }> = ({ teams, standings }) => {
   const activeTeams = teams.filter(t => t.is_active);
   const getPosition = (teamId: string) => standings.findIndex(s => s.team_id === teamId) + 1;
-  const getStanding = (teamId: string) => standings.find(s => s.team_id === teamId);
 
   return (
-    <div className="animate-fade-in">
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', fontFamily: 'Montserrat, sans-serif' }}>Tim Peserta</h1>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Tim Peserta</h1>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-        {activeTeams.map(team => {
-          const standing = getStanding(team.id);
+        {activeTeams.map((team: any) => {
           const pos = getPosition(team.id);
           return (
-            <div key={team.id} onClick={() => onViewTeam(team.id)} style={{
-              background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s',
-            }}>
-              <div style={{ height: 4, background: `linear-gradient(to right, ${C.primary}, ${C.primaryDark})` }} />
-              <div style={{ padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                  {team.logo_url ? (
-                    <img src={team.logo_url} alt={team.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 16 }}>
-                      {team.name.charAt(0)}
-                    </div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 13, color: C.textPrimary, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</p>
-                    <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Kapten: {team.captain}</p>
-                  </div>
-                  {pos > 0 && (
-                    <span style={{
-                      width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, fontWeight: 700,
-                      background: pos === 1 ? C.accent : pos === 2 ? C.primary : pos === 3 ? C.secondary : C.border,
-                      color: pos <= 3 ? '#fff' : C.textSecondary,
-                    }}>#{pos}</span>
-                  )}
+            <div key={team.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontWeight: 700, fontSize: 16,
+                }}>
+                  {team.name.charAt(0)}
                 </div>
-                {standing && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                    {[
-                      { v: standing.played, l: 'Main', c: C.textPrimary },
-                      { v: standing.total_points, l: 'Poin', c: C.primaryDark },
-                      { v: standing.pair_wins, l: 'Menang', c: C.success },
-                      { v: standing.pair_losses, l: 'Kalah', c: C.error },
-                    ].map((s, i) => (
-                      <div key={i} style={{ textAlign: 'center', background: C.bg, borderRadius: 8, padding: '6px 0' }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: s.c, margin: 0 }}>{s.v}</p>
-                        <p style={{ fontSize: 9, color: C.textSecondary, margin: 0 }}>{s.l}</p>
-                      </div>
-                    ))}
-                  </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{team.name}</p>
+                  <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Kapten: {team.captain}</p>
+                </div>
+                {pos > 0 && (
+                  <span style={{
+                    width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700,
+                    background: pos === 1 ? C.accent : pos === 2 ? C.primary : pos === 3 ? C.secondary : C.border,
+                    color: pos <= 3 ? '#fff' : C.textSecondary,
+                  }}>#{pos}</span>
                 )}
               </div>
             </div>
@@ -1179,338 +902,520 @@ const TeamsView: React.FC<{ teams: Team[]; standings: Standing[]; onViewTeam: (i
   );
 };
 
-// ============ STATISTICS VIEW ============
-const StatisticsView: React.FC<{ teams: Team[]; matches: Match[]; standings: Standing[]; pairs: Pair[]; pairResults: PairMatchResult[] }> = ({ teams, matches, standings, pairs, pairResults }) => {
-  const completedMatches = matches.filter(m => m.status === 'completed');
-  const maxPoints = Math.max(...standings.map(s => s.total_points), 1);
-  const getTeam = (id: string) => teams.find(t => t.id === id);
-
-  if (completedMatches.length === 0) {
-    return (
-      <div className="animate-fade-in">
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', fontFamily: 'Montserrat, sans-serif' }}>Statistik Liga</h1>
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <p style={{ color: C.textSecondary }}>Belum ada data statistik. Statistik akan tersedia setelah pertandingan pertama selesai.</p>
-        </div>
-      </div>
-    );
-  }
+// Players View
+// Player Profile Modal Component
+const PlayerProfileModal: React.FC<{ player: any; team: any; onClose: () => void }> = ({ player, team, onClose }) => {
+  const stats = store.getPlayerStats(player.id);
 
   return (
-    <div className="animate-fade-in">
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', fontFamily: 'Montserrat, sans-serif' }}>Statistik Liga</h1>
-      {/* Overview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-        {[
-          { label: 'Total Tim', value: teams.filter(t => t.is_active).length, color: C.primary },
-          { label: 'Pertandingan Selesai', value: completedMatches.length, color: C.success },
-          { label: 'Total Pasangan', value: pairs.filter(p => p.is_active).length, color: C.accent },
-          { label: 'Total Partai', value: pairResults.length, color: C.highlight },
-        ].map((s, i) => (
-          <div key={i} style={{ background: C.surface, borderRadius: 12, padding: 16, border: `1px solid ${C.border}` }}>
-            <p style={{ fontSize: 22, fontWeight: 700, color: s.color, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>{s.value}</p>
-            <p style={{ fontSize: 11, color: C.textSecondary, margin: '4px 0 0' }}>{s.label}</p>
+    <div 
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: 20,
+        animation: 'fadeIn 0.3s ease-out',
+      }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.surface,
+          borderRadius: 16,
+          maxWidth: 600,
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        {/* Header dengan foto */}
+        <div style={{
+          background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+          padding: 32,
+          textAlign: 'center',
+          position: 'relative',
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              borderRadius: '50%',
+              width: 32,
+              height: 32,
+              color: '#fff',
+              fontSize: 20,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ×
+          </button>
+          
+          {player.photo_url ? (
+            <img 
+              src={player.photo_url} 
+              alt={player.name} 
+              style={{ 
+                width: 120, 
+                height: 120, 
+                borderRadius: '50%', 
+                objectFit: 'cover',
+                border: '4px solid #fff',
+                marginBottom: 16,
+              }} 
+            />
+          ) : (
+            <div style={{ 
+              width: 120, 
+              height: 120, 
+              borderRadius: '50%', 
+              background: 'rgba(255,255,255,0.2)',
+              border: '4px solid #fff',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: '#fff', 
+              fontWeight: 700, 
+              fontSize: 48,
+              marginBottom: 16,
+            }}>
+              {player.name.charAt(0)}
+            </div>
+          )}
+          
+          <h2 style={{ color: '#fff', fontSize: 24, fontWeight: 700, margin: '0 0 8px' }}>
+            {player.name}
+          </h2>
+          {team && (
+            <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, margin: 0 }}>
+              {team.name}
+            </p>
+          )}
+        </div>
+
+        {/* Info pemain */}
+        <div style={{ padding: 24 }}>
+          {/* Detail Info */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
+            {player.gender && (
+              <div style={{ padding: 12, background: C.bg, borderRadius: 8 }}>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Jenis Kelamin</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                  {player.gender === 'male' ? 'Pria' : 'Wanita'}
+                </p>
+              </div>
+            )}
+            {player.position && (
+              <div style={{ padding: 12, background: C.bg, borderRadius: 8 }}>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: '0 0 4px' }}>Posisi</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                  {player.position === 'right' ? 'Right Side' : player.position === 'left' ? 'Left Side' : 'Both Sides'}
+                </p>
+              </div>
+            )}
           </div>
-        ))}
+
+          {/* Statistik */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>
+              Statistik Pertandingan
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.primary, margin: '0 0 4px' }}>
+                  {stats.totalMatches}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Pertandingan</p>
+              </div>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.success, margin: '0 0 4px' }}>
+                  {stats.totalWins}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Menang</p>
+              </div>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.error, margin: '0 0 4px' }}>
+                  {stats.totalLosses}
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Kalah</p>
+              </div>
+              <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: C.accent, margin: '0 0 4px' }}>
+                  {stats.winPercentage}%
+                </p>
+                <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>Win Rate</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Keunggulan */}
+          {player.strengths && player.strengths.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px' }}>
+                Keunggulan
+              </h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {player.strengths.map((strength: string, idx: number) => (
+                  <span
+                    key={idx}
+                    style={{
+                      padding: '6px 12px',
+                      background: `${C.accent}20`,
+                      color: C.primaryDark,
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: `1px solid ${C.accent}`,
+                    }}
+                  >
+                    {strength}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(!player.strengths || player.strengths.length === 0) && (
+            <div style={{ padding: 16, background: C.bg, borderRadius: 8, textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: C.textSecondary, margin: 0 }}>
+                Belum ada data keunggulan pemain
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-      {/* Chart */}
-      <div style={{ background: C.surface, borderRadius: 12, padding: 20, border: `1px solid ${C.border}`, marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px', fontFamily: 'Montserrat, sans-serif' }}>Total Poin Klasemen Tim</h3>
-        {standings.slice(0, 5).map((s: Standing, idx: number) => {
-          const pct = (s.total_points / maxPoints) * 100;
-          return (
-            <div key={s.team_id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <span style={{
-                width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 700, background: idx === 0 ? C.accent : idx === 1 ? C.primary : C.border,
-                color: idx < 2 ? '#fff' : C.textSecondary,
-              }}>{idx + 1}</span>
-              <span style={{ fontSize: 12, fontWeight: 500, color: C.textPrimary, width: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getTeam(s.team_id)?.name}</span>
-              <div style={{ flex: 1, height: 20, background: C.bg, borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.max(pct, 5)}%`, background: `linear-gradient(to right, ${C.primary}, ${C.primaryDark})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>{s.total_points}</span>
+    </div>
+  );
+};
+
+const PlayersView: React.FC<{ teams: any[]; players: any[] }> = ({ teams, players }) => {
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
+  
+  const activePlayers = players.filter(p => p.is_active);
+  const filteredPlayers = activePlayers.filter(p => {
+    const matchTeam = selectedTeam === 'all' || p.team_id === selectedTeam;
+    const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchTeam && matchSearch;
+  });
+
+  const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>Daftar Pemain</h1>
+      
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Cari pemain..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ flex: 1, minWidth: 200, padding: '10px 16px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }}
+        />
+        <select
+          value={selectedTeam}
+          onChange={(e) => setSelectedTeam(e.target.value)}
+          style={{ padding: '10px 16px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, background: C.surface }}
+        >
+          <option value="all">Semua Tim</option>
+          {teams.filter(t => t.is_active).map(team => (
+            <option key={team.id} value={team.id}>{team.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {filteredPlayers.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {filteredPlayers.map((player: any) => {
+            const team = getTeam(player.team_id);
+            return (
+              <div 
+                key={player.id} 
+                onClick={() => setSelectedPlayer(player)}
+                style={{ 
+                  background: C.surface, 
+                  borderRadius: 12, 
+                  border: `1px solid ${C.border}`, 
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <div style={{ height: 200, background: `linear-gradient(135deg, ${C.primary}20, ${C.primaryDark}20)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {player.photo_url ? (
+                    <img src={player.photo_url} alt={player.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: 80, height: 80, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 32 }}>
+                      {player.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+                <div style={{ padding: 16 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>{player.name}</h3>
+                  {team && (
+                    <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 8px' }}>{team.name}</p>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-block', padding: '4px 12px', background: player.is_active ? `${C.success}15` : `${C.error}15`, color: player.is_active ? C.success : C.error, borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
+                      {player.is_active ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                    {player.position && (
+                      <span style={{ display: 'inline-block', padding: '4px 12px', background: `${C.primary}15`, color: C.primary, borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
+                        {player.position === 'right' ? 'Right' : player.position === 'left' ? 'Left' : 'Both'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: 60, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+          <p style={{ color: C.textSecondary }}>Tidak ada pemain yang sesuai dengan filter</p>
+        </div>
+      )}
+
+      {/* Player Profile Modal */}
+      {selectedPlayer && (
+        <PlayerProfileModal
+          player={selectedPlayer}
+          team={getTeam(selectedPlayer.team_id)}
+          onClose={() => setSelectedPlayer(null)}
+        />
+      )}
     </div>
   );
 };
 
-// ============ LEAGUE INFO VIEW ============
-const LeagueInfoView: React.FC<{ league: any; teams: Team[]; matches: Match[] }> = ({ league, teams, matches }) => {
-  return (
-    <div className="animate-fade-in">
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px', fontFamily: 'Montserrat, sans-serif' }}>Informasi Liga</h1>
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
-        <div style={{ background: `linear-gradient(to right, ${C.primaryDark}, ${C.primary})`, padding: 24, color: '#fff' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 22, fontWeight: 700 }}>S</span>
-            </div>
-            <div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px', fontFamily: 'Montserrat, sans-serif' }}>{league.name}</h2>
-              <p style={{ fontSize: 12, opacity: 0.8, margin: 0, fontStyle: 'italic' }}>One League. One Community. One Passion.</p>
-              <p style={{ fontSize: 11, opacity: 0.6, margin: '4px 0 0' }}>Season {league.season} • Papua Barat Daya</p>
-            </div>
-          </div>
-        </div>
-        <div style={{ padding: 16 }}>
-          <p style={{ fontSize: 13, color: C.textSecondary, margin: 0, lineHeight: 1.6 }}>{league.description}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
+// MVP View
+const MVPView: React.FC<{ teams: any[]; players: any[]; matchdays: any[]; mvps: any[] }> = ({ teams, players, matchdays, mvps }) => {
+  const getPlayer = (playerId: string) => players.find(p => p.id === playerId);
+  const getTeam = (teamId: string) => teams.find(t => t.id === teamId);
+  const getMatchday = (matchdayId: string) => matchdays.find(md => md.id === matchdayId);
+  const getMatch = (matchId: string) => store.getMatches().find(m => m.id === matchId);
 
-// ============ MATCH DETAIL VIEW ============
-const MatchDetailView: React.FC<{ matchId: string; onBack: () => void; onViewTeam: (id: string) => void }> = ({ matchId, onBack, onViewTeam }) => {
-  const match = store.getMatches().find(m => m.id === matchId);
-  const teams = store.getTeams();
-  const matchdays = store.getMatchdays();
-  const pairResults = store.getPairResults();
-  const pairs = store.getPairs();
-  const players = store.getPlayers();
+  // Get MVP Matchday and MVP Liga
+  const mvpsMatchday = store.getMVPsMatchday().filter(m => m.is_published);
+  const mvpsLiga = store.getMVPsLiga().filter(m => m.is_published);
+  const league = store.getLeague();
 
-  if (!match) {
-    return (
-      <div style={{ textAlign: 'center', padding: 40 }}>
-        <p style={{ color: C.textSecondary }}>Pertandingan tidak ditemukan.</p>
-        <button onClick={onBack} style={{ marginTop: 16, padding: '8px 16px', background: C.primary, color: '#fff', borderRadius: 8, border: 'none', cursor: 'pointer' }}>Kembali</button>
-      </div>
-    );
-  }
+  // Group MVP Matchday by match
+  const mvpsByMatch = store.getMatches()
+    .filter(m => m.status === 'completed')
+    .map(match => {
+      const matchMvps = mvpsMatchday.filter(m => m.match_id === match.id);
+      return { match, mvps: matchMvps };
+    })
+    .filter(item => item.mvps.length > 0);
 
-  const teamA = teams.find(t => t.id === match.team_a_id);
-  const teamB = teams.find(t => t.id === match.team_b_id);
-  const matchday = matchdays.find(md => md.id === match.matchday_id);
-  const results = pairResults.filter(r => r.match_id === matchId);
-  const aPoints = results.reduce((sum, r) => sum + r.score_team_a, 0);
-  const bPoints = results.reduce((sum, r) => sum + r.score_team_b, 0);
-
-  const statusLabel = match.status === 'upcoming' ? 'Akan Datang' : match.status === 'ongoing' ? 'LIVE' : match.status === 'completed' ? 'Selesai' : 'Dibatalkan';
-  const statusColor = match.status === 'upcoming' ? C.secondary : match.status === 'ongoing' ? C.highlight : match.status === 'completed' ? C.success : C.error;
+  // Get current season MVP Liga
+  const currentMVPLiga = mvpsLiga.find(m => m.season === league.season);
 
   return (
-    <div className="animate-fade-in">
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.textSecondary, fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-        ← Kembali
-      </button>
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
-        <div style={{ background: `linear-gradient(to right, ${C.primaryDark}, ${C.primary})`, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>{matchday?.name}</span>
-          <span style={{ padding: '4px 12px', background: `${statusColor}20`, color: statusColor, fontSize: 11, fontWeight: 700, borderRadius: 12 }}>{statusLabel}</span>
+    <div>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>🏆 Player MVP</h1>
+      <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 24px' }}>Pemain terbaik setiap partai dan musim</p>
+
+      {/* MVP Liga Section */}
+      {currentMVPLiga && (
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>🏅 MVP Liga {league.season}</h2>
+          <div style={{ 
+            background: `linear-gradient(135deg, ${C.accent}20, ${C.success}20)`, 
+            borderRadius: 16, 
+            border: `3px solid ${C.accent}`, 
+            overflow: 'hidden',
+            boxShadow: '0 8px 24px rgba(168, 216, 46, 0.2)',
+          }}>
+            <div style={{ padding: 24, display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+              {(() => {
+                const player = getPlayer(currentMVPLiga.player_id);
+                const team = player ? getTeam(player.team_id) : null;
+                return (
+                  <>
+                    <div style={{ width: 140, height: 140, borderRadius: '50%', overflow: 'hidden', border: `5px solid ${C.accent}`, flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                      {player?.photo_url ? (
+                        <img src={player.photo_url} alt={player?.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 56 }}>
+                          {player?.name.charAt(0) || '?'}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 250 }}>
+                      <div style={{ 
+                        display: 'inline-block', 
+                        padding: '6px 16px', 
+                        background: C.accent, 
+                        color: '#fff', 
+                        borderRadius: 20, 
+                        fontSize: 12, 
+                        fontWeight: 700, 
+                        marginBottom: 12,
+                        letterSpacing: '0.5px',
+                      }}>
+                        🏅 MOST VALUABLE PLAYER
+                      </div>
+                      <h2 style={{ fontSize: 28, fontWeight: 700, color: C.textPrimary, margin: '0 0 8px' }}>
+                        {player?.name || 'Unknown Player'}
+                      </h2>
+                      {team && (
+                        <p style={{ fontSize: 16, color: C.textSecondary, margin: '0 0 16px', fontWeight: 500 }}>
+                          {team.name}
+                        </p>
+                      )}
+                      {currentMVPLiga.notes && (
+                        <div style={{ padding: 16, background: 'rgba(255,255,255,0.7)', borderRadius: 12, border: `1px solid ${C.accent}30` }}>
+                          <p style={{ fontSize: 14, color: C.textPrimary, margin: 0, fontStyle: 'italic', lineHeight: 1.6 }}>
+                            "{currentMVPLiga.notes}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
         </div>
-        <div style={{ padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 20 }}>
-                {teamA?.name.charAt(0)}
-              </div>
-              <button onClick={() => onViewTeam(match.team_a_id)} style={{ fontWeight: 700, fontSize: 13, color: C.textPrimary, background: 'none', border: 'none', cursor: 'pointer' }}>{teamA?.name}</button>
-              {match.winner_team_id === match.team_a_id && <p style={{ fontSize: 10, color: C.success, fontWeight: 600, margin: '4px 0 0' }}>🏆 PEMENANG</p>}
-            </div>
-            <div style={{ padding: '0 16px', textAlign: 'center' }}>
-              {match.status === 'completed' ? (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 28, fontWeight: 700, color: C.textPrimary, fontFamily: 'Montserrat, sans-serif' }}>{aPoints}</span>
-                    <span style={{ fontSize: 16, color: C.textSecondary }}>-</span>
-                    <span style={{ fontSize: 28, fontWeight: 700, color: C.textPrimary, fontFamily: 'Montserrat, sans-serif' }}>{bPoints}</span>
-                  </div>
-                  <p style={{ fontSize: 10, color: C.textSecondary, margin: '4px 0 0' }}>Total Poin</p>
-                </>
-              ) : (
-                <span style={{ fontSize: 20, fontWeight: 700, color: C.textSecondary }}>VS</span>
-              )}
-            </div>
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: `linear-gradient(135deg, ${C.highlight}, #e06040)`, margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 20 }}>
-                {teamB?.name.charAt(0)}
-              </div>
-              <button onClick={() => onViewTeam(match.team_b_id)} style={{ fontWeight: 700, fontSize: 13, color: C.textPrimary, background: 'none', border: 'none', cursor: 'pointer' }}>{teamB?.name}</button>
-              {match.winner_team_id === match.team_b_id && <p style={{ fontSize: 10, color: C.success, fontWeight: 600, margin: '4px 0 0' }}>🏆 PEMENANG</p>}
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.textSecondary }}>
-            <span>📅 {matchday?.date}</span>
-            <span>🕐 {match.start_time} - {match.end_time}</span>
-            <span>📍 Court {match.court}</span>
-          </div>
-        </div>
-      </div>
-      {results.length > 0 && (
-        <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 16px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.textPrimary, margin: 0 }}>Hasil Pertandingan Pasangan</h3>
-          </div>
-          <div style={{ padding: 16 }}>
-            {results.map(r => {
-              const pairA = pairs.find(p => p.id === r.team_a_pair_id);
-              const pairB = pairs.find(p => p.id === r.team_b_pair_id);
-              const p1a = players.find(p => p.id === pairA?.player_1_id);
-              const p2a = players.find(p => p.id === pairA?.player_2_id);
-              const p1b = players.find(p => p.id === pairB?.player_1_id);
-              const p2b = players.find(p => p.id === pairB?.player_2_id);
+      )}
+
+      {/* MVP Matchday Section */}
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 16px' }}>🏆 MVP Matchday</h2>
+        
+        {mvpsByMatch.length > 0 ? (
+          <div style={{ display: 'grid', gap: 20 }}>
+            {mvpsByMatch.map(({ match, mvps }) => {
+              const teamA = getTeam(match.team_a_id);
+              const teamB = getTeam(match.team_b_id);
+              const matchday = getMatchday(match.matchday_id);
+
               return (
-                <div key={r.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 12, marginBottom: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: C.primaryDark }}>Pasangan {r.position}</span>
-                    <span style={{ fontSize: 10, fontWeight: 500, color: r.winner_team_id === match.team_a_id ? C.success : C.highlight, padding: '2px 6px', background: r.winner_team_id === match.team_a_id ? `${C.success}15` : `${C.highlight}15`, borderRadius: 8 }}>
-                      {r.winner_team_id === match.team_a_id ? teamA?.name : teamB?.name} menang
-                    </span>
+                <div key={match.id} style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 20px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 600, color: C.textPrimary, margin: 0 }}>
+                      {matchday?.name} - {teamA?.name} vs {teamB?.name}
+                    </h3>
+                    <p style={{ fontSize: 12, color: C.textSecondary, margin: '4px 0 0' }}>
+                      {matchday?.date} • Court {match.court}
+                    </p>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 12, fontWeight: 500, color: C.textPrimary, margin: 0 }}>{p1a?.name || 'Pemain 1'}</p>
-                      <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>{p2a?.name || 'Pemain 2'}</p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px' }}>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: r.winner_team_id === match.team_a_id ? C.success : C.textSecondary }}>{r.score_team_a}</span>
-                      <span style={{ fontSize: 12, color: C.border }}>-</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: r.winner_team_id === match.team_b_id ? C.success : C.textSecondary }}>{r.score_team_b}</span>
-                    </div>
-                    <div style={{ flex: 1, textAlign: 'right' }}>
-                      <p style={{ fontSize: 12, fontWeight: 500, color: C.textPrimary, margin: 0 }}>{p1b?.name || 'Pemain 1'}</p>
-                      <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>{p2b?.name || 'Pemain 2'}</p>
+                  <div style={{ padding: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
+                      {[1, 2, 3, 4].map(party => {
+                        const mvp = mvps.find(m => m.party_number === party);
+                        const player = mvp ? getPlayer(mvp.player_id) : null;
+                        const team = player ? getTeam(player.team_id) : null;
+
+                        return (
+                          <div key={party} style={{ 
+                            padding: 16, 
+                            background: mvp ? `${C.accent}10` : C.bg, 
+                            borderRadius: 8, 
+                            border: mvp ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
+                            textAlign: 'center',
+                          }}>
+                            <p style={{ fontSize: 12, fontWeight: 600, color: C.primaryDark, margin: '0 0 12px' }}>
+                              Partai {party}
+                            </p>
+                            {mvp && player ? (
+                              <>
+                                <div style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${C.accent}`, margin: '0 auto 12px' }}>
+                                  {player.photo_url ? (
+                                    <img src={player.photo_url} alt={player.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 32 }}>
+                                      {player.name.charAt(0)}
+                                    </div>
+                                  )}
+                                </div>
+                                <p style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary, margin: '0 0 4px' }}>
+                                  🏆 {player.name}
+                                </p>
+                                {team && (
+                                  <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>
+                                    {team.name}
+                                  </p>
+                                )}
+                                {mvp.notes && (
+                                  <p style={{ fontSize: 11, color: C.textSecondary, margin: '8px 0 0', fontStyle: 'italic' }}>
+                                    "{mvp.notes}"
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ padding: 20, color: C.textSecondary, fontSize: 12 }}>
+                                Belum ada MVP
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ============ TEAM DETAIL VIEW ============
-const TeamDetailView: React.FC<{ teamId: string; onBack: () => void; onViewMatch: (id: string) => void }> = ({ teamId, onBack, onViewMatch }) => {
-  const team = store.getTeams().find(t => t.id === teamId);
-  const standings = store.getStandings();
-  const matches = store.getMatches();
-  const matchdays = store.getMatchdays();
-  const pairs = store.getPairs().filter(p => p.team_id === teamId && p.is_active);
-  const players = store.getPlayers().filter(p => p.team_id === teamId && p.is_active);
-
-  if (!team) {
-    return (
-      <div style={{ textAlign: 'center', padding: 40 }}>
-        <p style={{ color: C.textSecondary }}>Tim tidak ditemukan.</p>
-        <button onClick={onBack} style={{ marginTop: 16, padding: '8px 16px', background: C.primary, color: '#fff', borderRadius: 8, border: 'none', cursor: 'pointer' }}>Kembali</button>
-      </div>
-    );
-  }
-
-  const standing = standings.find(s => s.team_id === teamId);
-  const position = standings.findIndex(s => s.team_id === teamId) + 1;
-  const teamMatches = matches.filter(m => m.team_a_id === teamId || m.team_b_id === teamId);
-  const completedMatches = teamMatches.filter(m => m.status === 'completed').slice(-5).reverse();
-  const upcomingMatches = teamMatches.filter(m => m.status === 'upcoming').slice(0, 3);
-
-  return (
-    <div className="animate-fade-in">
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.textSecondary, fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-        ← Kembali
-      </button>
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
-        <div style={{ background: `linear-gradient(to right, ${C.primaryDark}, ${C.primary})`, padding: 20, color: '#fff' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {team.logo_url ? (
-              <img src={team.logo_url} alt={team.name} style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
-            ) : (
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 22 }}>
-                {team.name.charAt(0)}
-              </div>
-            )}
-            <div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px', fontFamily: 'Montserrat, sans-serif' }}>{team.name}</h1>
-              <p style={{ fontSize: 12, opacity: 0.8, margin: 0 }}>Kapten: {team.captain}</p>
-              <p style={{ fontSize: 11, opacity: 0.6, margin: '2px 0 0' }}>{team.description}</p>
-            </div>
-          </div>
-        </div>
-        {standing && (
-          <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-            {[
-              { l: 'Posisi', v: `#${position}`, c: C.primaryDark },
-              { l: 'Total Poin', v: standing.total_points, c: C.primary },
-              { l: 'Main', v: standing.played, c: C.textPrimary },
-              { l: 'Pasangan Menang', v: standing.pair_wins, c: C.success },
-            ].map((s, i) => (
-              <div key={i} style={{ textAlign: 'center', background: C.bg, borderRadius: 8, padding: '8px 0' }}>
-                <p style={{ fontSize: 10, color: C.textSecondary, margin: '0 0 2px' }}>{s.l}</p>
-                <p style={{ fontSize: 16, fontWeight: 700, color: s.c, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>{s.v}</p>
-              </div>
-            ))}
+        ) : (
+          <div style={{ textAlign: 'center', padding: 60, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, margin: '0 0 8px' }}>Belum Ada MVP Matchday</h3>
+            <p style={{ color: C.textSecondary, fontSize: 13 }}>MVP Matchday akan ditampilkan setelah admin memilih pemain terbaik setiap partai</p>
           </div>
         )}
       </div>
-      {pairs.length > 0 && (
-        <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '10px 16px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.textPrimary, margin: 0 }}>Pasangan Pemain</h3>
-          </div>
-          <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
-            {pairs.map(pair => {
-              const p1 = players.find(p => p.id === pair.player_1_id);
-              const p2 = players.find(p => p.id === pair.player_2_id);
-              return (
-                <div key={pair.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, borderRadius: 8, border: `1px solid ${C.border}` }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${C.primary}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.primaryDark, fontSize: 10, fontWeight: 700 }}>
-                    {pair.pair_name.split(' ').pop()}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 12, fontWeight: 500, color: C.textPrimary, margin: 0 }}>{p1?.name || 'Pemain 1'}</p>
-                    <p style={{ fontSize: 11, color: C.textSecondary, margin: 0 }}>& {p2?.name || 'Pemain 2'}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
-// ============ ADMIN VIEW ============
+// Admin View
 const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ onExit, onRefresh }) => {
   const [loggedIn, setLoggedIn] = useState(store.isAdminLoggedIn());
-  const [currentUser, setCurrentUser] = useState<User | null>(store.getCurrentUser());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const league = store.getLeague();
-  const [notification, setNotification] = useState<{ type: string; msg: string } | null>(null);
-  const [page, setPage] = useState('dashboard');
 
-  const notify = (type: string, msg: string) => {
-    setNotification({ type, msg });
-    setTimeout(() => setNotification(null), 3000);
-    onRefresh();
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = store.loginUser(email, password);
-    if (user) {
-      setLoggedIn(true);
-      setCurrentUser(user);
-      setError('');
-    } else {
-      setError('Email atau password salah');
+    try {
+      const user = await store.loginUser(email, password);
+      if (user) {
+        setLoggedIn(true);
+        setError('');
+      } else {
+        setError('Email atau password salah');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login gagal');
     }
-  };
-
-  const handleLogout = () => {
-    store.logoutUser();
-    setLoggedIn(false);
-    setCurrentUser(null);
-    onExit();
   };
 
   if (!loggedIn) {
@@ -1518,22 +1423,21 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         <div style={{ width: '100%', maxWidth: 360 }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}><Logo size="lg" logoUrl={league.logo_url} /></div>
-            <h1 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '0 0 4px', fontFamily: 'Montserrat, sans-serif' }}>Admin Login</h1>
-            <p style={{ fontSize: 12, color: C.textSecondary, margin: 0 }}>Masuk untuk mengelola liga</p>
+            <Logo size="lg" />
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary, margin: '16px 0 4px' }}>Admin Login</h1>
           </div>
           <form onSubmit={handleLogin} style={{ background: C.surface, borderRadius: 12, padding: 20, border: `1px solid ${C.border}` }}>
             {error && <div style={{ padding: '8px 12px', background: `${C.error}15`, borderRadius: 8, marginBottom: 12, fontSize: 12, color: C.error }}>{error}</div>}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.textPrimary, marginBottom: 4 }}>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, outline: 'none' }} placeholder="admin@soqcomm.com" required />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 4 }}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }} required />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.textPrimary, marginBottom: 4 }}>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, outline: 'none' }} placeholder="••••••••" required />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 4 }}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }} required />
             </div>
             <button type="submit" style={{ width: '100%', padding: '10px', background: C.primary, color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' }}>Login</button>
-            <button type="button" onClick={onExit} style={{ width: '100%', padding: '10px', background: 'transparent', color: C.textSecondary, fontSize: 12, border: 'none', cursor: 'pointer', marginTop: 8 }}>← Kembali ke halaman utama</button>
+            <button type="button" onClick={onExit} style={{ width: '100%', padding: '10px', background: 'transparent', color: C.textSecondary, fontSize: 12, border: 'none', cursor: 'pointer', marginTop: 8 }}>← Kembali</button>
           </form>
           <p style={{ textAlign: 'center', fontSize: 11, color: C.textSecondary, marginTop: 12 }}>Default: admin@soqcomm.com / padel2025</p>
         </div>
@@ -1541,144 +1445,25 @@ const AdminView: React.FC<{ onExit: () => void; onRefresh: () => void }> = ({ on
     );
   }
 
-  const teams = store.getTeams();
-  const players = store.getPlayers();
-  const matches = store.getMatches();
-  const standings = store.getStandings();
-
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'scores', label: 'Input Skor' },
-    { id: 'settings', label: 'Pengaturan' },
-  ];
-
   return (
-    <div style={{ minHeight: '100vh', background: C.bg }}>
-      {notification && (
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 100, padding: '10px 16px', borderRadius: 8, background: notification.type === 'success' ? C.success : C.error, color: '#fff', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-          {notification.msg}
-        </div>
-      )}
-      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Logo size="sm" logoUrl={league.logo_url} />
-          <span style={{ fontSize: 10, padding: '2px 8px', background: `${C.primary}15`, color: C.primaryDark, borderRadius: 10, fontWeight: 600 }}>Admin</span>
-          {currentUser && <span style={{ fontSize: 11, color: C.textSecondary }}>• {currentUser.name} ({currentUser.role})</span>}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onExit} style={{ padding: '6px 12px', fontSize: 12, color: C.textSecondary, background: 'none', border: 'none', cursor: 'pointer' }}>Lihat Situs</button>
-          <button onClick={handleLogout} style={{ padding: '6px 12px', fontSize: 12, color: C.error, background: `${C.error}10`, borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 500 }}>Logout</button>
-        </div>
-      </header>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 16 }}>
-        <nav style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4, marginBottom: 16 }}>
-          {menuItems.map(item => (
-            <button key={item.id} onClick={() => setPage(item.id)} style={{
-              padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              background: page === item.id ? C.primary : C.surface, color: page === item.id ? '#fff' : C.textSecondary,
-            }}>{item.label}</button>
-          ))}
-        </nav>
-        <div>
-          {page === 'dashboard' && (
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px', fontFamily: 'Montserrat, sans-serif' }}>Dashboard</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
-                {[
-                  { l: 'Tim', v: teams.length, c: C.primary },
-                  { l: 'Pemain', v: players.filter(p => p.is_active).length, c: C.secondary },
-                  { l: 'Pertandingan', v: matches.length, c: C.primaryDark },
-                  { l: 'Selesai', v: matches.filter(m => m.status === 'completed').length, c: C.success },
-                  { l: 'Mendatang', v: matches.filter(m => m.status === 'upcoming').length, c: C.warning },
-                ].map((s, i) => (
-                  <div key={i} style={{ background: C.surface, borderRadius: 10, padding: 14, border: `1px solid ${C.border}` }}>
-                    <p style={{ fontSize: 20, fontWeight: 700, color: s.c, margin: 0, fontFamily: 'Montserrat, sans-serif' }}>{s.v}</p>
-                    <p style={{ fontSize: 10, color: C.textSecondary, margin: '2px 0 0' }}>{s.l}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {page === 'scores' && <AdminScores notify={notify} />}
-          {page === 'settings' && <AdminSettings notify={notify} onRefresh={onRefresh} />}
+    <React.Suspense fallback={
+      <div style={{ 
+        minHeight: '100vh', 
+        background: C.bg, 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <Logo size="lg" />
+          <p style={{ color: C.textSecondary, fontSize: 14, marginTop: 16 }}>Memuat panel admin...</p>
         </div>
       </div>
-    </div>
+    }>
+      <AdminPanelLazy onExit={onExit} onRefresh={onRefresh} />
+    </React.Suspense>
   );
 };
 
-// Admin Scores Input
-const AdminScores: React.FC<{ notify: (type: string, msg: string) => void }> = ({ notify }) => {
-  const matches = store.getMatches();
-  const teams = store.getTeams();
-  const matchdays = store.getMatchdays();
-  const pairs = store.getPairs();
-  const [selectedMatch, setSelectedMatch] = useState('');
-  const [scores, setScores] = useState([{ a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }]);
-
-  const availableMatches = matches.filter(m => m.status === 'upcoming' || m.status === 'ongoing');
-  const match = matches.find(m => m.id === selectedMatch);
-
-  const handleSave = (draft: boolean) => {
-    if (!match) return;
-    const results = scores.map((s, idx) => ({
-      match_id: match.id,
-      position: idx + 1,
-      team_a_pair_id: pairs.filter(p => p.team_id === match.team_a_id && p.is_active)[idx]?.id || '',
-      team_b_pair_id: pairs.filter(p => p.team_id === match.team_b_id && p.is_active)[idx]?.id || '',
-      score_team_a: s.a,
-      score_team_b: s.b,
-      winner_team_id: s.a > s.b ? match.team_a_id : s.b > s.a ? match.team_b_id : null,
-      status: draft ? 'pending' as const : 'completed' as const,
-    }));
-    if (!draft) {
-      store.saveMatchResult(match.id, results);
-      notify('success', 'Hasil disahkan!');
-    } else {
-      const all = store.getPairResults().filter(r => r.match_id !== match.id);
-      store.savePairResults([...all, ...results.map(r => ({ ...r, id: uuidv4() }))]);
-      notify('success', 'Draft disimpan');
-    }
-    setSelectedMatch('');
-    setScores([{ a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }, { a: 0, b: 0 }]);
-  };
-
-  return (
-    <div>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, margin: '0 0 12px', fontFamily: 'Montserrat, sans-serif' }}>Input Skor</h2>
-      <div style={{ background: C.surface, borderRadius: 10, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-        <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.textPrimary, marginBottom: 6 }}>Pilih Pertandingan</label>
-        <select value={selectedMatch} onChange={e => setSelectedMatch(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }}>
-          <option value="">-- Pilih pertandingan --</option>
-          {availableMatches.map(m => {
-            const tA = teams.find(t => t.id === m.team_a_id);
-            const tB = teams.find(t => t.id === m.team_b_id);
-            const md = matchdays.find(d => d.id === m.matchday_id);
-            return <option key={m.id} value={m.id}>{md?.name} - {tA?.name} vs {tB?.name}</option>;
-          })}
-        </select>
-      </div>
-      {selectedMatch && match && (
-        <div style={{ background: C.surface, borderRadius: 10, padding: 16, border: `1px solid ${C.border}` }}>
-          <p style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: C.textPrimary, margin: '0 0 12px' }}>
-            {teams.find(t => t.id === match.team_a_id)?.name} vs {teams.find(t => t.id === match.team_b_id)?.name}
-          </p>
-          {scores.map((s, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
-              <span style={{ fontSize: 11, fontWeight: 500, color: C.primaryDark, width: 70 }}>Pasangan {idx + 1}</span>
-              <input type="number" min="0" max="7" value={s.a} onChange={e => { const n = [...scores]; n[idx] = { ...n[idx], a: parseInt(e.target.value) || 0 }; setScores(n); }} style={{ width: 50, textAlign: 'center', padding: '6px', borderRadius: 6, border: `1px solid ${C.border}`, fontWeight: 700 }} />
-              <span style={{ color: C.textSecondary }}>-</span>
-              <input type="number" min="0" max="7" value={s.b} onChange={e => { const n = [...scores]; n[idx] = { ...n[idx], b: parseInt(e.target.value) || 0 }; setScores(n); }} style={{ width: 50, textAlign: 'center', padding: '6px', borderRadius: 6, border: `1px solid ${C.border}`, fontWeight: 700 }} />
-            </div>
-          ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={() => handleSave(false)} style={{ flex: 1, padding: '10px', background: C.success, color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' }}>Sahkan Hasil</button>
-            <button onClick={() => handleSave(true)} style={{ flex: 1, padding: '10px', background: C.warning, color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' }}>Simpan Draft</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default App;
+// Lazy load AdminPanel
+const AdminPanelLazy = React.lazy(() => import('./components/AdminPanel'));

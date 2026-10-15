@@ -1,7 +1,7 @@
-import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, LeagueSettings, User, AuditLog } from './types';
-import { v4 as uuidv4 } from 'uuid';
+import { supabase } from './lib/supabase';
+import { League, Team, Player, Pair, Matchday, Match, PairMatchResult, Standing, User, AuditLog, MVP, PlayerStats, MatchLineup, MVPMatchday, MVPLiga } from './types';
 
-const DEFAULT_SETTINGS: LeagueSettings = {
+const DEFAULT_SETTINGS = {
   teams_count: 8,
   pairs_per_team: 5,
   pairs_played: 4,
@@ -15,188 +15,24 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   golden_point: false,
 };
 
-const DEFAULT_LEAGUE: League = {
-  id: 'league-1',
-  name: 'SOQ.COMM PADEL LEAGUE',
-  logo_url: '',
-  season: '2025',
-  description: 'One League. One Community. One Passion. Kompetisi padel yang mempertemukan komunitas, klub, dan pemain terbaik dalam semangat sportivitas dan persaudaraan.',
-  status: 'ongoing',
-  settings: DEFAULT_SETTINGS,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-const DEFAULT_TEAMS: Team[] = [
-  { id: 'team-1', name: 'Papua Padel Club', logo_url: '', captain: 'Andi Prasetyo', description: 'Klub padel dari Sorong', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-2', name: 'Sorong Padel United', logo_url: '', captain: 'Budi Santoso', description: 'Klub padel komunitas Sorong', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-3', name: 'Raja Ampat Padel', logo_url: '', captain: 'Carlos Wospakrik', description: 'Klub padel dari Raja Ampat', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-4', name: 'Bird of Paradise', logo_url: '', captain: 'Daniel Inubun', description: 'Klub padel Cendrawasih', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-5', name: 'West Papua Padel', logo_url: '', captain: 'Erik Mambrasar', description: 'Klub padel Papua Barat Daya', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-6', name: 'Cendrawasih Padel FC', logo_url: '', captain: 'Fajar Rumbekas', description: 'Klub padel Cendrawasih FC', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-7', name: 'Pacific Padel Team', logo_url: '', captain: 'Gregory Flassy', description: 'Klub padel Pasifik', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'team-8', name: 'Coral Reef Padel', logo_url: '', captain: 'Hans Kambuaya', description: 'Klub padel terumbu karang', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-];
-
-const DEFAULT_USERS: User[] = [
-  {
-    id: 'user-1',
-    name: 'Super Admin',
-    email: 'admin@soqcomm.com',
-    password_hash: btoa('padel2025'),
-    role: 'super_admin',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
-function generatePlayers(teams: Team[]): Player[] {
-  const players: Player[] = [];
-  const firstNames = ['Andi', 'Budi', 'Carlos', 'Daniel', 'Erik', 'Fajar', 'Greg', 'Hans', 'Ivan', 'Joko'];
-  const lastNames = ['Prasetyo', 'Santoso', 'Wospakrik', 'Inubun', 'Mambrasar', 'Rumbekas', 'Flassy', 'Kambuaya', 'Rumaseb', 'Solossa'];
-  
-  teams.forEach((team, teamIdx) => {
-    for (let i = 0; i < 10; i++) {
-      players.push({
-        id: `player-${teamIdx}-${i}`,
-        team_id: team.id,
-        name: `${firstNames[(teamIdx + i) % 10]} ${lastNames[(teamIdx + i + 3) % 10]}`,
-        photo_url: '',
-        is_active: true,
-        created_at: new Date().toISOString(),
-      });
-    }
-  });
-  return players;
-}
-
-function generatePairs(teams: Team[], players: Player[]): Pair[] {
-  const pairs: Pair[] = [];
-  teams.forEach((team, teamIdx) => {
-    const teamPlayers = players.filter(p => p.team_id === team.id);
-    for (let i = 0; i < 5; i++) {
-      pairs.push({
-        id: `pair-${teamIdx}-${i}`,
-        team_id: team.id,
-        player_1_id: teamPlayers[i * 2]?.id || '',
-        player_2_id: teamPlayers[i * 2 + 1]?.id || '',
-        pair_name: `Pasangan ${i + 1}`,
-        is_active: true,
-      });
-    }
-  });
-  return pairs;
-}
-
-function generateMatchdays(leagueId: string): Matchday[] {
-  const matchdays: Matchday[] = [];
-  const startDate = new Date('2025-02-01');
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i * 7);
-    matchdays.push({
-      id: `matchday-${i + 1}`,
-      league_id: leagueId,
-      name: `Matchday ${i + 1}`,
-      matchday_number: i + 1,
-      date: date.toISOString().split('T')[0],
-      status: i < 3 ? 'completed' : i === 3 ? 'ongoing' : 'upcoming',
-    });
-  }
-  return matchdays;
-}
-
-function generateMatches(matchdays: Matchday[], teams: Team[]): Match[] {
-  const matches: Match[] = [];
-  const fixtures = [
-    [[0,1],[2,3],[4,5],[6,7]],
-    [[0,2],[1,3],[4,6],[5,7]],
-    [[0,3],[1,2],[4,7],[5,6]],
-    [[0,4],[1,5],[2,6],[3,7]],
-    [[0,5],[1,4],[2,7],[3,6]],
-    [[0,6],[1,7],[2,4],[3,5]],
-    [[0,7],[1,6],[2,5],[3,4]],
-  ];
-
-  matchdays.forEach((md, mdIdx) => {
-    const mdFixtures = fixtures[mdIdx] || [];
-    mdFixtures.forEach((fixture, fIdx) => {
-      const status = md.status;
-      matches.push({
-        id: `match-${mdIdx}-${fIdx}`,
-        matchday_id: md.id,
-        team_a_id: teams[fixture[0]].id,
-        team_b_id: teams[fixture[1]].id,
-        court: (fIdx % 2) + 1,
-        start_time: fIdx < 2 ? '16:00' : '18:00',
-        end_time: fIdx < 2 ? '18:00' : '20:00',
-        status: status as Match['status'],
-        winner_team_id: status === 'completed' ? (Math.random() > 0.5 ? teams[fixture[0]].id : teams[fixture[1]].id) : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    });
-  });
-  return matches;
-}
-
-function generatePairResults(matches: Match[], pairs: Pair[]): PairMatchResult[] {
-  const results: PairMatchResult[] = [];
-  matches.forEach(match => {
-    if (match.status === 'completed') {
-      for (let pos = 1; pos <= 4; pos++) {
-        const scoreA = Math.floor(Math.random() * 4) + 3;
-        const scoreB = Math.floor(Math.random() * scoreA);
-        results.push({
-          id: `result-${match.id}-${pos}`,
-          match_id: match.id,
-          position: pos,
-          team_a_pair_id: pairs.find(p => p.team_id === match.team_a_id && p.is_active)?.id || '',
-          team_b_pair_id: pairs.find(p => p.team_id === match.team_b_id && p.is_active)?.id || '',
-          score_team_a: scoreA,
-          score_team_b: scoreB,
-          winner_team_id: scoreA > scoreB ? match.team_a_id : match.team_b_id,
-          status: 'completed',
-        });
-      }
-    }
-  });
-  return results;
-}
-
-// SISTEM KLASEMEN BARU: Total poin dari semua partai pasangan
 function calculateStandings(matches: Match[], results: PairMatchResult[], teams: Team[]): Standing[] {
   const standings: Record<string, Standing> = {};
   teams.forEach(t => {
-    standings[t.id] = { 
-      team_id: t.id, 
-      played: 0, 
-      total_points: 0, 
-      pair_wins: 0, 
-      pair_losses: 0, 
-      pair_difference: 0,
-      head_to_head_points: {},
-    };
+    standings[t.id] = { team_id: t.id, played: 0, total_points: 0, pair_wins: 0, pair_losses: 0, pair_difference: 0, head_to_head_points: {} };
   });
 
-  const completedMatches = matches.filter(m => m.status === 'completed');
-  completedMatches.forEach(match => {
+  matches.filter(m => m.status === 'completed').forEach(match => {
     if (standings[match.team_a_id]) standings[match.team_a_id].played++;
     if (standings[match.team_b_id]) standings[match.team_b_id].played++;
 
     const matchResults = results.filter(r => r.match_id === match.id && r.status === 'completed');
-    let teamAPoints = 0, teamBPoints = 0;
-    let teamAWins = 0, teamBWins = 0;
+    let teamAPoints = 0, teamBPoints = 0, teamAWins = 0, teamBWins = 0;
 
     matchResults.forEach(r => {
       teamAPoints += r.score_team_a;
       teamBPoints += r.score_team_b;
-      if (r.winner_team_id === match.team_a_id) {
-        teamAWins++;
-      } else if (r.winner_team_id === match.team_b_id) {
-        teamBWins++;
-      }
+      if (r.winner_team_id === match.team_a_id) teamAWins++;
+      else if (r.winner_team_id === match.team_b_id) teamBWins++;
     });
 
     if (standings[match.team_a_id]) {
@@ -205,9 +41,6 @@ function calculateStandings(matches: Match[], results: PairMatchResult[], teams:
       s.pair_wins += teamAWins;
       s.pair_losses += teamBWins;
       s.pair_difference = s.pair_wins - s.pair_losses;
-      // Head-to-head
-      if (!s.head_to_head_points) s.head_to_head_points = {};
-      s.head_to_head_points[match.team_b_id] = (s.head_to_head_points[match.team_b_id] || 0) + teamAPoints;
     }
 
     if (standings[match.team_b_id]) {
@@ -216,485 +49,1038 @@ function calculateStandings(matches: Match[], results: PairMatchResult[], teams:
       s.pair_wins += teamBWins;
       s.pair_losses += teamAWins;
       s.pair_difference = s.pair_wins - s.pair_losses;
-      // Head-to-head
-      if (!s.head_to_head_points) s.head_to_head_points = {};
-      s.head_to_head_points[match.team_a_id] = (s.head_to_head_points[match.team_a_id] || 0) + teamBPoints;
     }
   });
 
-  // Sort berdasarkan: total_points DESC, pair_difference DESC, pair_wins DESC, head-to-head
   return Object.values(standings).sort((a, b) => {
     if (b.total_points !== a.total_points) return b.total_points - a.total_points;
     if (b.pair_difference !== a.pair_difference) return b.pair_difference - a.pair_difference;
-    if (b.pair_wins !== a.pair_wins) return b.pair_wins - a.pair_wins;
-    // Head-to-head
-    const h2hA = a.head_to_head_points?.[b.team_id] || 0;
-    const h2hB = b.head_to_head_points?.[a.team_id] || 0;
-    return h2hB - h2hA;
+    return b.pair_wins - a.pair_wins;
   });
 }
 
-// Generate jadwal round-robin otomatis
-function generateRoundRobinSchedule(teams: Team[], startDate: string, courts: number): { matchdays: Matchday[], matches: Match[] } {
-  const n = teams.length;
-  if (n < 2) return { matchdays: [], matches: [] };
-
-  const matchdays: Matchday[] = [];
-  const matches: Match[] = [];
-  const numRounds = n - 1;
-  const matchesPerRound = Math.floor(n / 2);
-
-  // Circle method untuk round-robin
-  const teamIds = teams.map(t => t.id);
-  if (n % 2 === 1) teamIds.push('BYE'); // Tambah bye jika ganjil
-
-  const start = new Date(startDate);
-
-  for (let round = 0; round < numRounds; round++) {
-    const date = new Date(start);
-    date.setDate(date.getDate() + round * 7);
-    
-    const matchday: Matchday = {
-      id: `matchday-gen-${round + 1}`,
-      league_id: 'league-1',
-      name: `Matchday ${round + 1}`,
-      matchday_number: round + 1,
-      date: date.toISOString().split('T')[0],
-      status: 'upcoming',
-    };
-    matchdays.push(matchday);
-
-    // Generate pasangan untuk round ini
-    const roundFixtures: [string, string][] = [];
-    for (let i = 0; i < matchesPerRound; i++) {
-      const home = teamIds[i];
-      const away = teamIds[n - 1 - i];
-      if (home !== 'BYE' && away !== 'BYE') {
-        roundFixtures.push([home, away]);
-      }
-    }
-
-    // Assign ke court dan slot waktu
-    roundFixtures.forEach((fixture, idx) => {
-      const court = (idx % courts) + 1;
-      const slot = Math.floor(idx / courts);
-      const startHour = 16 + slot * 2;
-      
-      matches.push({
-        id: `match-gen-${round}-${idx}`,
-        matchday_id: matchday.id,
-        team_a_id: fixture[0],
-        team_b_id: fixture[1],
-        court,
-        start_time: `${startHour}:00`,
-        end_time: `${startHour + 2}:00`,
-        status: 'upcoming',
-        winner_team_id: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    });
-
-    // Rotate tim (circle method)
-    const last = teamIds.pop()!;
-    teamIds.splice(1, 0, last);
-  }
-
-  return { matchdays, matches };
-}
-
-// Store class
 class Store {
   private listeners: Set<() => void> = new Set();
+  private currentUser: User | null = null;
+  private league: League | null = null;
+  private teams: Team[] = [];
+  private players: Player[] = [];
+  private pairs: Pair[] = [];
+  private matchdays: Matchday[] = [];
+  private matches: Match[] = [];
+  private pairResults: PairMatchResult[] = [];
+  private users: User[] = [];
+  private mvps: MVP[] = [];
+  private mvpsMatchday: MVPMatchday[] = [];
+  private mvpsLiga: MVPLiga[] = [];
+  private matchLineups: MatchLineup[] = [];
+  private initialized = false;
+
+  async init() {
+    if (this.initialized) return;
+    try {
+      console.log('🔵 Initializing store...');
+      
+      // Fetch data individually to handle missing tables gracefully
+      const leagueData = await supabase.from('leagues').select('*').limit(1).maybeSingle();
+      const teamsData = await supabase.from('teams').select('*').order('name');
+      const playersData = await supabase.from('players').select('*').order('name');
+      const pairsData = await supabase.from('pairs').select('*');
+      const matchdaysData = await supabase.from('matchdays').select('*').order('matchday_number');
+      const matchesData = await supabase.from('matches').select('*');
+      const resultsData = await supabase.from('pair_match_results').select('*');
+      const usersData = await supabase.from('admin_users').select('*');
+      const mvpsData = await supabase.from('mvps').select('*');
+      
+      // New tables - handle gracefully if they don't exist yet
+      const mvpsMatchdayData = await supabase.from('mvps_matchday').select('*').order('created_at', { ascending: false });
+      const mvpsLigaData = await supabase.from('mvps_liga').select('*').order('created_at', { ascending: false });
+      const lineupsData = await supabase.from('match_lineups').select('*').order('match_id, party_number');
+
+      console.log('✅ Data fetched successfully');
+
+      if (leagueData.data) {
+        this.league = { ...leagueData.data, settings: leagueData.data.settings || DEFAULT_SETTINGS };
+      } else {
+        const { data } = await supabase.from('leagues').insert([{
+          name: 'SOQ.COMM PADEL LEAGUE',
+          season: '2025',
+          description: 'One League. One Community. One Passion.',
+          status: 'ongoing',
+          settings: DEFAULT_SETTINGS,
+        }]).select().single();
+        if (data) this.league = { ...data, settings: data.settings || DEFAULT_SETTINGS };
+      }
+
+      this.teams = teamsData.data || [];
+      this.players = playersData.data || [];
+      this.pairs = pairsData.data || [];
+      this.matchdays = matchdaysData.data || [];
+      this.matches = matchesData.data || [];
+      this.pairResults = resultsData.data || [];
+      this.users = usersData.data || [];
+      this.mvps = mvpsData.data || [];
+      this.mvpsMatchday = mvpsMatchdayData.data || [];
+      this.mvpsLiga = mvpsLigaData.data || [];
+      this.matchLineups = lineupsData.data || [];
+      
+      console.log('✅ Store initialized with data:', {
+        teams: this.teams.length,
+        players: this.players.length,
+        matches: this.matches.length,
+        mvpsMatchday: this.mvpsMatchday.length,
+        mvpsLiga: this.mvpsLiga.length,
+      });
+
+      if (this.users.length === 0) {
+        const { data } = await supabase.from('admin_users').insert([{
+          name: 'Super Admin',
+          email: 'admin@soqcomm.com',
+          password_hash: btoa('padel2025'),
+          role: 'super_admin',
+          is_active: true,
+        }]).select().single();
+        if (data) this.users = [data];
+      }
+
+      if (this.teams.length === 0) {
+        const defaultTeams = [
+          { name: 'Papua Padel Club', captain: 'Andi Prasetyo', description: 'Klub padel dari Sorong' },
+          { name: 'Sorong Padel United', captain: 'Budi Santoso', description: 'Klub padel komunitas Sorong' },
+          { name: 'Raja Ampat Padel', captain: 'Carlos Wospakrik', description: 'Klub padel dari Raja Ampat' },
+          { name: 'Bird of Paradise', captain: 'Daniel Inubun', description: 'Klub padel Cendrawasih' },
+          { name: 'West Papua Padel', captain: 'Erik Mambrasar', description: 'Klub padel Papua Barat Daya' },
+          { name: 'Cendrawasih Padel FC', captain: 'Fajar Rumbekas', description: 'Klub padel Cendrawasih FC' },
+          { name: 'Pacific Padel Team', captain: 'Gregory Flassy', description: 'Klub padel Pasifik' },
+          { name: 'Coral Reef Padel', captain: 'Hans Kambuaya', description: 'Klub padel terumbu karang' },
+        ];
+        const { data } = await supabase.from('teams').insert(defaultTeams).select();
+        if (data) this.teams = data;
+      }
+
+      // Auto-generate pairs from players if pairs table is empty
+      if (this.pairs.length === 0 && this.players.length > 0) {
+        await this.generatePairsFromPlayers();
+      }
+
+      this.initialized = true;
+      this.notify();
+    } catch (error: any) {
+      console.error('❌ Error initializing store:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+      
+      // Fallback data jika Supabase gagal
+      console.log('⚠️ Using fallback data...');
+      this.league = {
+        id: 'fallback-league',
+        name: 'SOQ.COMM PADEL LEAGUE',
+        logo_url: '',
+        season: '2025',
+        description: 'One League. One Community. One Passion. Kompetisi padel yang mempertemukan komunitas, klub, dan pemain terbaik dalam semangat sportivitas dan persaudaraan.',
+        status: 'ongoing',
+        settings: DEFAULT_SETTINGS,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      this.teams = [
+        { id: 'team-1', name: 'Papua Padel Club', logo_url: '', captain: 'Andi Prasetyo', description: 'Klub padel dari Sorong', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-2', name: 'Sorong Padel United', logo_url: '', captain: 'Budi Santoso', description: 'Klub padel komunitas Sorong', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-3', name: 'Raja Ampat Padel', logo_url: '', captain: 'Carlos Wospakrik', description: 'Klub padel dari Raja Ampat', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-4', name: 'Bird of Paradise', logo_url: '', captain: 'Daniel Inubun', description: 'Klub padel Cendrawasih', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-5', name: 'West Papua Padel', logo_url: '', captain: 'Erik Mambrasar', description: 'Klub padel Papua Barat Daya', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-6', name: 'Cendrawasih Padel FC', logo_url: '', captain: 'Fajar Rumbekas', description: 'Klub padel Cendrawasih FC', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-7', name: 'Pacific Padel Team', logo_url: '', captain: 'Gregory Flassy', description: 'Klub padel Pasifik', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: 'team-8', name: 'Coral Reef Padel', logo_url: '', captain: 'Hans Kambuaya', description: 'Klub padel terumbu karang', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+      ];
+      this.players = [];
+      this.pairs = [];
+      this.matchdays = [];
+      this.matches = [];
+      this.pairResults = [];
+      this.mvps = [];
+      this.mvpsMatchday = [];
+      this.mvpsLiga = [];
+      this.matchLineups = [];
+      this.users = [{
+        id: 'user-1',
+        name: 'Super Admin',
+        email: 'admin@soqcomm.com',
+        password_hash: btoa('padel2025'),
+        role: 'super_admin',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }];
+      this.initialized = true;
+      this.notify();
+      console.log('✅ Fallback data loaded successfully');
+    }
+  }
 
   getLeague(): League {
-    const data = localStorage.getItem('spl_league');
-    if (data) return JSON.parse(data);
-    localStorage.setItem('spl_league', JSON.stringify(DEFAULT_LEAGUE));
-    return DEFAULT_LEAGUE;
+    return this.league || { id: 'default', name: 'SOQ.COMM PADEL LEAGUE', logo_url: '', season: '2025', description: '', status: 'ongoing', settings: DEFAULT_SETTINGS, created_at: '', updated_at: '' };
   }
 
-  getTeams(): Team[] {
-    const data = localStorage.getItem('spl_teams');
-    if (data) return JSON.parse(data);
-    localStorage.setItem('spl_teams', JSON.stringify(DEFAULT_TEAMS));
-    return DEFAULT_TEAMS;
+  async saveLeague(league: Partial<League> & { id: string }) {
+    if (!this.league) return;
+    const { error } = await supabase.from('leagues').update({
+      name: league.name, logo_url: league.logo_url, season: league.season,
+      description: league.description, status: league.status, settings: league.settings,
+    }).eq('id', league.id);
+    if (!error) {
+      this.league = { ...this.league, ...league };
+      this.notify();
+    }
   }
 
-  getPlayers(): Player[] {
-    const data = localStorage.getItem('spl_players');
-    if (data) return JSON.parse(data);
-    const teams = this.getTeams();
-    const players = generatePlayers(teams);
-    localStorage.setItem('spl_players', JSON.stringify(players));
-    return players;
+  getTeams(): Team[] { return this.teams; }
+  async addTeam(team: Omit<Team, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase.from('teams').insert([team]).select().single();
+    if (!error && data) { this.teams = [...this.teams, data]; this.notify(); return data; }
+    return null;
+  }
+  async updateTeam(team: Team) {
+    const { error } = await supabase.from('teams').update({
+      name: team.name, logo_url: team.logo_url, captain: team.captain, description: team.description, is_active: team.is_active,
+    }).eq('id', team.id);
+    if (!error) { this.teams = this.teams.map(t => t.id === team.id ? team : t); this.notify(); }
   }
 
-  getPairs(): Pair[] {
-    const data = localStorage.getItem('spl_pairs');
-    if (data) return JSON.parse(data);
-    const teams = this.getTeams();
-    const players = this.getPlayers();
-    const pairs = generatePairs(teams, players);
-    localStorage.setItem('spl_pairs', JSON.stringify(pairs));
-    return pairs;
-  }
-
-  getMatchdays(): Matchday[] {
-    const data = localStorage.getItem('spl_matchdays');
-    if (data) return JSON.parse(data);
-    const league = this.getLeague();
-    const matchdays = generateMatchdays(league.id);
-    localStorage.setItem('spl_matchdays', JSON.stringify(matchdays));
-    return matchdays;
-  }
-
-  getMatches(): Match[] {
-    const data = localStorage.getItem('spl_matches');
-    if (data) return JSON.parse(data);
-    const matchdays = this.getMatchdays();
-    const teams = this.getTeams();
-    const matches = generateMatches(matchdays, teams);
-    localStorage.setItem('spl_matches', JSON.stringify(matches));
-    return matches;
-  }
-
-  getPairResults(): PairMatchResult[] {
-    const data = localStorage.getItem('spl_pair_results');
-    if (data) return JSON.parse(data);
-    const matches = this.getMatches();
-    const pairs = this.getPairs();
-    const results = generatePairResults(matches, pairs);
-    localStorage.setItem('spl_pair_results', JSON.stringify(results));
-    return results;
-  }
-
-  getStandings(): Standing[] {
-    const matches = this.getMatches();
-    const results = this.getPairResults();
-    const teams = this.getTeams();
-    return calculateStandings(matches, results, teams);
-  }
-
-  getUsers(): User[] {
-    const data = localStorage.getItem('spl_users');
-    if (data) return JSON.parse(data);
-    localStorage.setItem('spl_users', JSON.stringify(DEFAULT_USERS));
-    return DEFAULT_USERS;
-  }
-
-  getAuditLogs(): AuditLog[] {
-    const data = localStorage.getItem('spl_audit_logs');
-    if (data) return JSON.parse(data);
-    return [];
-  }
-
-  // Mutations
-  saveLeague(league: League) {
-    league.updated_at = new Date().toISOString();
-    localStorage.setItem('spl_league', JSON.stringify(league));
-    this.notify();
-  }
-
-  saveTeams(teams: Team[]) {
-    localStorage.setItem('spl_teams', JSON.stringify(teams));
-    this.notify();
-  }
-
-  savePlayers(players: Player[]) {
-    localStorage.setItem('spl_players', JSON.stringify(players));
-    this.notify();
-  }
-
-  savePairs(pairs: Pair[]) {
-    localStorage.setItem('spl_pairs', JSON.stringify(pairs));
-    this.notify();
-  }
-
-  saveMatchdays(matchdays: Matchday[]) {
-    localStorage.setItem('spl_matchdays', JSON.stringify(matchdays));
-    this.notify();
-  }
-
-  saveMatches(matches: Match[]) {
-    localStorage.setItem('spl_matches', JSON.stringify(matches));
-    this.notify();
-  }
-
-  savePairResults(results: PairMatchResult[]) {
-    localStorage.setItem('spl_pair_results', JSON.stringify(results));
-    this.notify();
-  }
-
-  saveUsers(users: User[]) {
-    localStorage.setItem('spl_users', JSON.stringify(users));
-    this.notify();
-  }
-
-  addAuditLog(userId: string, userName: string, action: string, details: string) {
-    const logs = this.getAuditLogs();
-    logs.push({
-      id: uuidv4(),
-      user_id: userId,
-      user_name: userName,
-      action,
-      details,
-      timestamp: new Date().toISOString(),
-    });
-    localStorage.setItem('spl_audit_logs', JSON.stringify(logs));
-  }
-
-  // Admin auth
-  getCurrentUser(): User | null {
-    const userId = localStorage.getItem('spl_current_user');
-    if (!userId) return null;
-    const users = this.getUsers();
-    return users.find(u => u.id === userId) || null;
-  }
-
-  isAdminLoggedIn(): boolean {
-    return this.getCurrentUser() !== null;
-  }
-
-  loginUser(email: string, password: string): User | null {
-    const users = this.getUsers();
-    const user = users.find(u => u.email === email && u.password_hash === btoa(password) && u.is_active);
-    if (user) {
-      localStorage.setItem('spl_current_user', user.id);
-      this.addAuditLog(user.id, user.name, 'LOGIN', 'User logged in');
-      return user;
+  getPlayers(): Player[] { return this.players; }
+  async addPlayer(player: Omit<Player, 'id' | 'created_at'>) {
+    const { data, error } = await supabase.from('players').insert([player]).select().single();
+    if (!error && data) { 
+      this.players = [...this.players, data]; 
+      // Auto-generate pairs after adding player
+      await this.generatePairsFromPlayers();
+      this.notify(); 
+      return data; 
     }
     return null;
   }
-
-  logoutUser() {
-    const user = this.getCurrentUser();
-    if (user) {
-      this.addAuditLog(user.id, user.name, 'LOGOUT', 'User logged out');
+  async updatePlayer(player: Player) {
+    const { error } = await supabase.from('players').update({
+      name: player.name, 
+      team_id: player.team_id, 
+      photo_url: player.photo_url, 
+      is_active: player.is_active,
+      gender: player.gender || null,
+      position: player.position || null,
+      strengths: player.strengths || [],
+    }).eq('id', player.id);
+    if (!error) { 
+      this.players = this.players.map(p => p.id === player.id ? player : p); 
+      this.notify(); 
     }
-    localStorage.removeItem('spl_current_user');
+  }
+
+  // Calculate player statistics from match results using match_lineups
+  getPlayerStats(playerId: string): PlayerStats {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) {
+      return { 
+        totalMatches: 0, 
+        totalWins: 0, 
+        totalLosses: 0, 
+        winPercentage: 0,
+        mvpMatchdayCount: 0,
+        isMVPLiga: false,
+        matchHistory: []
+      };
+    }
+
+    // Find all match lineups where this player participated
+    const playerLineups = this.matchLineups.filter(l => 
+      l.team_a_player1_id === playerId || 
+      l.team_a_player2_id === playerId || 
+      l.team_b_player1_id === playerId || 
+      l.team_b_player2_id === playerId
+    );
+
+    let totalMatches = 0;
+    let totalWins = 0;
+    let totalLosses = 0;
+    const matchHistory: PlayerStats['matchHistory'] = [];
+
+    playerLineups.forEach(lineup => {
+      // Find the match for this lineup
+      const match = this.matches.find(m => m.id === lineup.match_id);
+      if (!match || match.status !== 'completed') return;
+
+      // Find the match result for this party
+      const result = this.pairResults.find(r => 
+        r.match_id === match.id && 
+        r.position === lineup.party_number &&
+        r.status === 'completed'
+      );
+
+      if (!result) return;
+
+      totalMatches++;
+
+      // Determine which team this player is on
+      const isTeamA = lineup.team_a_player1_id === playerId || lineup.team_a_player2_id === playerId;
+      
+      // Find partner
+      const partnerId = isTeamA 
+        ? (lineup.team_a_player1_id === playerId ? lineup.team_a_player2_id : lineup.team_a_player1_id)
+        : (lineup.team_b_player1_id === playerId ? lineup.team_b_player2_id : lineup.team_b_player1_id);
+      
+      const partner = this.players.find(p => p.id === partnerId);
+      const partnerName = partner?.name || 'Unknown';
+
+      // Find opponent team
+      const opponentTeamId = isTeamA ? match.team_b_id : match.team_a_id;
+      const opponentTeam = this.teams.find(t => t.id === opponentTeamId);
+      const opponentName = opponentTeam?.name || 'Unknown';
+
+      // Determine if player's team won this party
+      const playerTeamWon = isTeamA 
+        ? result.score_team_a > result.score_team_b
+        : result.score_team_b > result.score_team_a;
+
+      if (playerTeamWon) {
+        totalWins++;
+      } else {
+        totalLosses++;
+      }
+
+      // Add to match history
+      const matchday = this.matchdays.find(md => md.id === match.matchday_id);
+      matchHistory.push({
+        date: matchday?.date || '',
+        matchday: matchday?.name || '',
+        opponent: opponentName,
+        partyNumber: lineup.party_number,
+        partner: partnerName,
+        score: `${result.score_team_a}-${result.score_team_b}`,
+        result: playerTeamWon ? 'win' : 'loss'
+      });
+    });
+
+    const winPercentage = totalMatches > 0 ? (totalWins / totalMatches) * 100 : 0;
+
+    // Count MVP Matchday
+    const mvpMatchdayCount = this.mvpsMatchday.filter(m => 
+      m.player_id === playerId && m.is_published
+    ).length;
+
+    // Check if player is MVP Liga
+    const isMVPLiga = this.mvpsLiga.some(m => 
+      m.player_id === playerId && m.is_published
+    );
+
+    return {
+      totalMatches,
+      totalWins,
+      totalLosses,
+      winPercentage: Math.round(winPercentage * 100) / 100,
+      mvpMatchdayCount,
+      isMVPLiga,
+      matchHistory: matchHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    };
+  }
+
+  // Generate pairs automatically from active players
+  async generatePairsFromPlayers() {
+    const activePlayers = this.players.filter(p => p.is_active);
+    const teams = this.teams.filter(t => t.is_active);
+    
+    // Clear existing pairs
+    await supabase.from('pairs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    
+    const newPairs: any[] = [];
+    
+    // For each team, create pairs from active players
+    for (const team of teams) {
+      const teamPlayers = activePlayers.filter(p => p.team_id === team.id);
+      
+      // Create pairs (2 players per pair)
+      for (let i = 0; i < teamPlayers.length - 1; i += 2) {
+        const player1 = teamPlayers[i];
+        const player2 = teamPlayers[i + 1];
+        
+        if (player1 && player2) {
+          newPairs.push({
+            team_id: team.id,
+            player_1_id: player1.id,
+            player_2_id: player2.id,
+            pair_name: `${player1.name} & ${player2.name}`,
+            is_active: true,
+          });
+        }
+      }
+    }
+    
+    // Insert new pairs
+    if (newPairs.length > 0) {
+      const { data, error } = await supabase.from('pairs').insert(newPairs).select();
+      if (!error && data) {
+        this.pairs = data;
+      }
+    } else {
+      this.pairs = [];
+    }
+  }
+
+  getPairs(): Pair[] { return this.pairs; }
+  getMatchdays(): Matchday[] { return this.matchdays; }
+  getMatches(): Match[] { return this.matches; }
+  async addMatch(match: Omit<Match, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase.from('matches').insert([match]).select().single();
+    if (!error && data) { this.matches = [...this.matches, data]; this.notify(); return data; }
+    return null;
+  }
+  async updateMatch(match: Match) {
+    const { error } = await supabase.from('matches').update({
+      matchday_id: match.matchday_id, team_a_id: match.team_a_id, team_b_id: match.team_b_id,
+      court: match.court, start_time: match.start_time, end_time: match.end_time,
+      status: match.status, winner_team_id: match.winner_team_id,
+    }).eq('id', match.id);
+    if (!error) { this.matches = this.matches.map(m => m.id === match.id ? match : m); this.notify(); }
+  }
+  async deleteMatch(matchId: string) {
+    await supabase.from('pair_match_results').delete().eq('match_id', matchId);
+    await supabase.from('match_lineups').delete().eq('match_id', matchId);
+    const { error } = await supabase.from('matches').delete().eq('id', matchId);
+    if (!error) {
+      this.matches = this.matches.filter(m => m.id !== matchId);
+      this.pairResults = this.pairResults.filter(r => r.match_id !== matchId);
+      this.matchLineups = this.matchLineups.filter(l => l.match_id !== matchId);
+      this.notify();
+    }
+  }
+
+  // Match Lineups CRUD
+  getMatchLineups(): MatchLineup[] { return this.matchLineups; }
+  
+  getMatchLineupsByMatchId(matchId: string): MatchLineup[] {
+    return this.matchLineups.filter(l => l.match_id === matchId).sort((a, b) => a.party_number - b.party_number);
+  }
+
+  async saveMatchLineups(matchId: string, lineups: Omit<MatchLineup, 'id' | 'created_at' | 'updated_at'>[]) {
+    // Validasi matchId
+    if (!matchId || matchId === '') {
+      throw new Error('ID pertandingan tidak valid');
+    }
+
+    // Hapus lineups lama untuk match ini
+    const { error: deleteError } = await supabase.from('match_lineups').delete().eq('match_id', matchId);
+    if (deleteError) {
+      console.error('Error deleting old lineups:', deleteError);
+      throw new Error('Gagal menghapus susunan pemain lama: ' + deleteError.message);
+    }
+
+    // Insert lineups baru
+    if (lineups.length > 0) {
+      const { data, error } = await supabase.from('match_lineups').insert(lineups).select();
+      if (error) {
+        console.error('Error inserting lineups:', error);
+        throw new Error('Gagal menyimpan susunan pemain: ' + error.message);
+      }
+
+      if (data) {
+        // Update local state
+        this.matchLineups = [
+          ...this.matchLineups.filter(l => l.match_id !== matchId),
+          ...data
+        ];
+        this.notify();
+      }
+    } else {
+      // Jika lineups kosong, hanya hapus dari local state
+      this.matchLineups = this.matchLineups.filter(l => l.match_id !== matchId);
+      this.notify();
+    }
+  }
+
+  getPairResults(): PairMatchResult[] { return this.pairResults; }
+  async saveMatchResult(matchId: string, results: Omit<PairMatchResult, 'id'>[], isDraft: boolean = false) {
+    // Validasi matchId
+    if (!matchId || matchId === '') {
+      throw new Error('ID pertandingan tidak valid. Silakan pilih pertandingan kembali.');
+    }
+
+    // Validasi: pastikan semua 4 partai memiliki skor jika bukan draft
+    if (!isDraft) {
+      const hasAllScores = results.every(r => r.score_team_a >= 0 && r.score_team_b >= 0);
+      if (!hasAllScores) {
+        throw new Error('Semua partai harus memiliki skor yang valid');
+      }
+    }
+
+    // Validasi UUID untuk setiap result
+    results.forEach((r, idx) => {
+      if (!r.match_id || r.match_id === '') {
+        throw new Error(`ID pertandingan tidak valid pada partai ${idx + 1}`);
+      }
+      // team_a_pair_id dan team_b_pair_id boleh null, tapi tidak boleh string kosong
+      if (r.team_a_pair_id === '') {
+        throw new Error(`ID pasangan tim A tidak valid pada partai ${idx + 1}. Silakan periksa data pasangan.`);
+      }
+      if (r.team_b_pair_id === '') {
+        throw new Error(`ID pasangan tim B tidak valid pada partai ${idx + 1}. Silakan periksa data pasangan.`);
+      }
+    });
+
+    // Hapus hasil lama untuk match ini
+    const { error: deleteError } = await supabase.from('pair_match_results').delete().eq('match_id', matchId);
+    if (deleteError) {
+      console.error('Error deleting old results:', deleteError);
+      throw new Error('Gagal menghapus hasil lama: ' + deleteError.message);
+    }
+
+    // Insert hasil baru
+    const { data, error } = await supabase.from('pair_match_results').insert(results).select();
+    if (error) {
+      console.error('Error inserting results:', error);
+      throw new Error('Gagal menyimpan hasil: ' + error.message);
+    }
+
+    if (data) {
+      // Update local state
+      this.pairResults = [...this.pairResults.filter(r => r.match_id !== matchId), ...data];
+      
+      const match = this.matches.find(m => m.id === matchId);
+      if (match) {
+        // Hitung total poin
+        let aPoints = 0, bPoints = 0;
+        results.forEach(r => { 
+          aPoints += r.score_team_a; 
+          bPoints += r.score_team_b; 
+        });
+
+        // Update match berdasarkan status draft atau finalized
+        if (isDraft) {
+          // Draft: match tetap ongoing, results status pending
+          match.status = 'ongoing';
+          match.winner_team_id = null;
+        } else {
+          // Finalized: match completed, results completed
+          match.status = 'completed';
+          match.winner_team_id = aPoints > bPoints ? match.team_a_id : bPoints > aPoints ? match.team_b_id : null;
+        }
+
+        // Simpan update match ke database
+        const { error: updateError } = await supabase
+          .from('matches')
+          .update({
+            status: match.status,
+            winner_team_id: match.winner_team_id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', match.id);
+
+        if (updateError) {
+          console.error('Error updating match:', updateError);
+          throw new Error('Gagal update status match: ' + updateError.message);
+        }
+
+        // Update local matches array
+        this.matches = this.matches.map(m => m.id === match.id ? { ...match, updated_at: new Date().toISOString() } : m);
+      }
+
+      this.notify();
+    }
+  }
+
+  getStandings(): Standing[] { return calculateStandings(this.matches, this.pairResults, this.teams); }
+  getUsers(): User[] { return this.users; }
+  getCurrentUser(): User | null { return this.currentUser; }
+  isAdminLoggedIn(): boolean { return this.currentUser !== null; }
+
+  async loginUser(email: string, password: string): Promise<User | null> {
+    const { data, error } = await supabase.from('admin_users').select('*').eq('email', email).eq('password_hash', btoa(password)).eq('is_active', true).single();
+    if (error || !data) return null;
+    this.currentUser = data;
+    this.notify();
+    return this.currentUser;
+  }
+
+  async logoutUser() {
+    this.currentUser = null;
     this.notify();
   }
 
-  // User management
-  addUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>) {
-    const users = this.getUsers();
-    const newUser: User = { 
-      ...user, 
-      id: uuidv4(), 
-      password_hash: btoa(user.password_hash),
-      created_at: new Date().toISOString(), 
-      updated_at: new Date().toISOString() 
-    };
-    users.push(newUser);
-    this.saveUsers(users);
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'ADD_USER', `Added user: ${user.name}`);
-    }
-    return newUser;
+  async addUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase.from('admin_users').insert([{ ...user, password_hash: btoa(user.password_hash) }]).select().single();
+    if (!error && data) { this.users = [...this.users, data]; this.notify(); return data; }
+    return null;
+  }
+  async updateUser(user: User) {
+    const { error } = await supabase.from('admin_users').update({
+      name: user.name, email: user.email, role: user.role, is_active: user.is_active,
+    }).eq('id', user.id);
+    if (!error) { this.users = this.users.map(u => u.id === user.id ? user : u); this.notify(); }
+  }
+  async deleteUser(userId: string) {
+    const { error } = await supabase.from('admin_users').delete().eq('id', userId);
+    if (!error) { this.users = this.users.filter(u => u.id !== userId); this.notify(); }
   }
 
-  updateUser(user: User) {
-    const users = this.getUsers();
-    const idx = users.findIndex(u => u.id === user.id);
-    if (idx >= 0) {
-      users[idx] = { ...user, updated_at: new Date().toISOString() };
-      this.saveUsers(users);
-      const currentUser = this.getCurrentUser();
-      if (currentUser) {
-        this.addAuditLog(currentUser.id, currentUser.name, 'UPDATE_USER', `Updated user: ${user.name}`);
+  // Generate round-robin schedule with proper algorithm
+  generateRoundRobin(teams: Team[]): { matchdays: any[]; matches: any[]; byeTeams: any[] } {
+    const n = teams.length;
+    if (n < 2) return { matchdays: [], matches: [], byeTeams: [] };
+
+    // Shuffle teams for randomization
+    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    const teamIds = shuffledTeams.map(t => t.id);
+    
+    // For odd number of teams, add BYE
+    const hasBye = n % 2 === 1;
+    if (hasBye) {
+      teamIds.push('BYE');
+    }
+    
+    const numTeams = teamIds.length;
+    const numRounds = hasBye ? n : n - 1;
+    const matchesPerRound = Math.floor(numTeams / 2);
+    
+    const matchdays: any[] = [];
+    const matches: any[] = [];
+    const byeTeams: any[] = [];
+    
+    // Circle method algorithm
+    const fixed = teamIds[0]; // First team stays fixed
+    const rotating = teamIds.slice(1); // Rest will rotate
+    
+    for (let round = 0; round < numRounds; round++) {
+      const roundMatches: any[] = [];
+      let byeTeam: string | null = null;
+      
+      // Create pairings for this round
+      const currentRound = [fixed, ...rotating];
+      
+      for (let i = 0; i < matchesPerRound; i++) {
+        const home = currentRound[i];
+        const away = currentRound[numTeams - 1 - i];
+        
+        // Skip BYE matches
+        if (home === 'BYE') {
+          byeTeam = away;
+          continue;
+        }
+        if (away === 'BYE') {
+          byeTeam = home;
+          continue;
+        }
+        
+        // Randomize home/away orientation
+        const swap = Math.random() > 0.5;
+        roundMatches.push({
+          team_a_id: swap ? away : home,
+          team_b_id: swap ? home : away,
+        });
       }
-    }
-  }
-
-  deleteUser(userId: string) {
-    const users = this.getUsers().filter(u => u.id !== userId);
-    this.saveUsers(users);
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'DELETE_USER', `Deleted user: ${userId}`);
-    }
-  }
-
-  // Team management
-  addTeam(team: Omit<Team, 'id' | 'created_at' | 'updated_at'>) {
-    const teams = this.getTeams();
-    const newTeam: Team = { ...team, id: uuidv4(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    teams.push(newTeam);
-    this.saveTeams(teams);
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'ADD_TEAM', `Added team: ${team.name}`);
-    }
-    return newTeam;
-  }
-
-  updateTeam(team: Team) {
-    const teams = this.getTeams();
-    const idx = teams.findIndex(t => t.id === team.id);
-    if (idx >= 0) {
-      teams[idx] = { ...team, updated_at: new Date().toISOString() };
-      this.saveTeams(teams);
-      const currentUser = this.getCurrentUser();
-      if (currentUser) {
-        this.addAuditLog(currentUser.id, currentUser.name, 'UPDATE_TEAM', `Updated team: ${team.name}`);
-      }
-    }
-  }
-
-  // Player management
-  addPlayer(player: Omit<Player, 'id' | 'created_at'>) {
-    const players = this.getPlayers();
-    const newPlayer: Player = { ...player, id: uuidv4(), created_at: new Date().toISOString() };
-    players.push(newPlayer);
-    this.savePlayers(players);
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'ADD_PLAYER', `Added player: ${player.name}`);
-    }
-    return newPlayer;
-  }
-
-  updatePlayer(player: Player) {
-    const players = this.getPlayers();
-    const idx = players.findIndex(p => p.id === player.id);
-    if (idx >= 0) {
-      players[idx] = player;
-      this.savePlayers(players);
-      const currentUser = this.getCurrentUser();
-      if (currentUser) {
-        this.addAuditLog(currentUser.id, currentUser.name, 'UPDATE_PLAYER', `Updated player: ${player.name}`);
-      }
-    }
-  }
-
-  // Match management
-  addMatch(match: Omit<Match, 'id' | 'created_at' | 'updated_at'>) {
-    const matches = this.getMatches();
-    const newMatch: Match = { ...match, id: uuidv4(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    matches.push(newMatch);
-    this.saveMatches(matches);
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'ADD_MATCH', `Added match: ${match.team_a_id} vs ${match.team_b_id}`);
-    }
-    return newMatch;
-  }
-
-  updateMatch(match: Match) {
-    const matches = this.getMatches();
-    const idx = matches.findIndex(m => m.id === match.id);
-    if (idx >= 0) {
-      matches[idx] = { ...match, updated_at: new Date().toISOString() };
-      this.saveMatches(matches);
-      const currentUser = this.getCurrentUser();
-      if (currentUser) {
-        this.addAuditLog(currentUser.id, currentUser.name, 'UPDATE_MATCH', `Updated match: ${match.id}`);
-      }
-    }
-  }
-
-  deleteMatch(matchId: string) {
-    const matches = this.getMatches().filter(m => m.id !== matchId);
-    this.saveMatches(matches);
-    const results = this.getPairResults().filter(r => r.match_id !== matchId);
-    this.savePairResults(results);
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'DELETE_MATCH', `Deleted match: ${matchId}`);
-    }
-  }
-
-  saveMatchResult(matchId: string, results: Omit<PairMatchResult, 'id'>[]) {
-    const allResults = this.getPairResults();
-    const filtered = allResults.filter(r => r.match_id !== matchId);
-    const newResults = results.map(r => ({ ...r, id: uuidv4() }));
-    this.savePairResults([...filtered, ...newResults]);
-
-    // Update match status and winner
-    const matches = this.getMatches();
-    const match = matches.find(m => m.id === matchId);
-    if (match) {
-      let aPoints = 0, bPoints = 0;
-      newResults.forEach(r => {
-        aPoints += r.score_team_a;
-        bPoints += r.score_team_b;
+      
+      // Shuffle match order within round
+      roundMatches.sort(() => Math.random() - 0.5);
+      
+      matchdays.push({
+        round: round + 1,
+        matches: roundMatches,
+        byeTeam: byeTeam,
       });
-      match.winner_team_id = aPoints > bPoints ? match.team_a_id : bPoints > aPoints ? match.team_b_id : null;
-      match.status = 'completed';
-      this.updateMatch(match);
+      
+      if (byeTeam) {
+        byeTeams.push({
+          round: round + 1,
+          teamId: byeTeam,
+        });
+      }
+      
+      // Rotate teams (circle method)
+      if (rotating.length > 1) {
+        const last = rotating.pop()!;
+        rotating.unshift(last);
+      }
     }
-
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'SAVE_MATCH_RESULT', `Saved result for match: ${matchId}`);
-    }
+    
+    return { matchdays, matches, byeTeams };
   }
-
-  // Generate schedule
-  generateSchedule(teams: Team[], startDate: string, courts: number, replaceExisting: boolean) {
-    const { matchdays, matches } = generateRoundRobinSchedule(teams, startDate, courts);
+  
+  // Validate generated schedule
+  validateSchedule(teams: Team[], schedule: any[]): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const n = teams.length;
+    const expectedTotalMatches = (n * (n - 1)) / 2;
+    const expectedRounds = n % 2 === 1 ? n : n - 1;
+    
+    // Count total matches
+    let totalMatches = 0;
+    const matchups = new Map<string, number>();
+    const teamMatchCount = new Map<string, number>();
+    const teamByeCount = new Map<string, number>();
+    
+    schedule.forEach((matchday, mdIdx) => {
+      const teamsInRound = new Set<string>();
+      
+      matchday.matches.forEach((match: any) => {
+        totalMatches++;
+        
+        // Check for duplicate matchups
+        const key = [match.team_a_id, match.team_b_id].sort().join('-');
+        matchups.set(key, (matchups.get(key) || 0) + 1);
+        
+        // Count team appearances
+        teamMatchCount.set(match.team_a_id, (teamMatchCount.get(match.team_a_id) || 0) + 1);
+        teamMatchCount.set(match.team_b_id, (teamMatchCount.get(match.team_b_id) || 0) + 1);
+        
+        // Check if team plays twice in same round
+        if (teamsInRound.has(match.team_a_id)) {
+          errors.push(`Tim ${match.team_a_id} bermain dua kali di Matchday ${mdIdx + 1}`);
+        }
+        if (teamsInRound.has(match.team_b_id)) {
+          errors.push(`Tim ${match.team_b_id} bermain dua kali di Matchday ${mdIdx + 1}`);
+        }
+        teamsInRound.add(match.team_a_id);
+        teamsInRound.add(match.team_b_id);
+      });
+      
+      // Track bye
+      if (matchday.byeTeam) {
+        teamByeCount.set(matchday.byeTeam, (teamByeCount.get(matchday.byeTeam) || 0) + 1);
+      }
+    });
+    
+    // Validate total matches
+    if (totalMatches !== expectedTotalMatches) {
+      errors.push(`Total pertandingan tidak sesuai: ${totalMatches} (seharusnya ${expectedTotalMatches})`);
+    }
+    
+    // Validate number of rounds
+    if (schedule.length !== expectedRounds) {
+      errors.push(`Jumlah matchday tidak sesuai: ${schedule.length} (seharusnya ${expectedRounds})`);
+    }
+    
+    // Check for duplicate matchups
+    matchups.forEach((count, key) => {
+      if (count > 1) {
+        errors.push(`Pertandingan ${key} muncul ${count} kali (seharusnya 1)`);
+      }
+    });
+    
+    // Check each team plays correct number of matches
+    teams.forEach(team => {
+      const matchCount = teamMatchCount.get(team.id) || 0;
+      const expectedCount = n - 1;
+      if (matchCount !== expectedCount) {
+        errors.push(`Tim ${team.name} bermain ${matchCount} kali (seharusnya ${expectedCount})`);
+      }
+      
+      // Check bye count for odd number of teams
+      if (n % 2 === 1) {
+        const byeCount = teamByeCount.get(team.id) || 0;
+        if (byeCount !== 1) {
+          errors.push(`Tim ${team.name} mendapat bye ${byeCount} kali (seharusnya 1)`);
+        }
+      }
+    });
+    
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+  
+  // Preview schedule without saving
+  previewSchedule(teams: Team[], startDate: string, courts: number) {
+    const { matchdays, byeTeams } = this.generateRoundRobin(teams);
+    
+    const start = new Date(startDate);
+    const preview = matchdays.map((md, idx) => {
+      const date = new Date(start);
+      date.setDate(date.getDate() + idx * 7);
+      
+      const matchesWithDetails = md.matches.map((match: any, matchIdx: number) => {
+        const court = (matchIdx % courts) + 1;
+        const slot = Math.floor(matchIdx / courts);
+        const startHour = 16 + slot * 2;
+        
+        const teamA = teams.find(t => t.id === match.team_a_id);
+        const teamB = teams.find(t => t.id === match.team_b_id);
+        
+        return {
+          ...match,
+          court,
+          start_time: `${startHour}:00`,
+          end_time: `${startHour + 2}:00`,
+          team_a_name: teamA?.name || 'Unknown',
+          team_b_name: teamB?.name || 'Unknown',
+        };
+      });
+      
+      const byeTeam = md.byeTeam ? teams.find(t => t.id === md.byeTeam) : null;
+      
+      return {
+        matchday_number: idx + 1,
+        date: date.toISOString().split('T')[0],
+        matches: matchesWithDetails,
+        bye_team: byeTeam ? { id: byeTeam.id, name: byeTeam.name } : null,
+      };
+    });
+    
+    const validation = this.validateSchedule(teams, matchdays);
+    
+    return {
+      schedule: preview,
+      validation,
+      summary: {
+        total_teams: teams.length,
+        total_matchdays: preview.length,
+        total_matches: preview.reduce((sum, md) => sum + md.matches.length, 0),
+        total_byes: byeTeams.length,
+      },
+    };
+  }
+  
+  // Save generated schedule to database
+  async generateSchedule(teams: Team[], startDate: string, courts: number, replaceExisting: boolean) {
+    const { matchdays, byeTeams } = this.generateRoundRobin(teams);
+    
+    // Validate before saving
+    const validation = this.validateSchedule(teams, matchdays);
+    if (!validation.valid) {
+      console.error('Schedule validation failed:', validation.errors);
+      throw new Error('Jadwal tidak valid: ' + validation.errors.join(', '));
+    }
+    
+    const start = new Date(startDate);
     
     if (replaceExisting) {
-      // Hapus matchdays dan matches lama yang belum selesai
-      const oldMatchdays = this.getMatchdays().filter(md => {
-        const mdMatches = this.getMatches().filter(m => m.matchday_id === md.id);
-        return mdMatches.every(m => m.status !== 'completed');
+      // Delete existing upcoming matchdays and matches
+      const upcomingMatchdays = this.matchdays.filter(md => md.status !== 'completed');
+      for (const md of upcomingMatchdays) {
+        await supabase.from('matches').delete().eq('matchday_id', md.id);
+        await supabase.from('matchdays').delete().eq('id', md.id);
+      }
+      this.matchdays = this.matchdays.filter(md => md.status === 'completed');
+      this.matches = this.matches.filter(m => {
+        const md = this.matchdays.find(d => d.id === m.matchday_id);
+        return md !== undefined;
       });
-      const oldMatchIds = this.getMatches()
-        .filter(m => oldMatchdays.some(md => md.id === m.matchday_id))
-        .map(m => m.id);
+    }
+    
+    // Insert new matchdays and matches
+    for (let i = 0; i < matchdays.length; i++) {
+      const md = matchdays[i];
+      const date = new Date(start);
+      date.setDate(date.getDate() + i * 7);
       
-      const remainingMatchdays = this.getMatchdays().filter(md => !oldMatchdays.some(omd => omd.id === md.id));
-      const remainingMatches = this.getMatches().filter(m => !oldMatchIds.includes(m.id));
-      const remainingResults = this.getPairResults().filter(r => !oldMatchIds.includes(r.match_id));
-
-      this.saveMatchdays([...remainingMatchdays, ...matchdays]);
-      this.saveMatches([...remainingMatches, ...matches]);
-      this.savePairResults(remainingResults);
-    } else {
-      this.saveMatchdays([...this.getMatchdays(), ...matchdays]);
-      this.saveMatches([...this.getMatches(), ...matches]);
+      const matchdayData = {
+        league_id: this.league?.id || '',
+        name: `Matchday ${i + 1}`,
+        matchday_number: i + 1,
+        date: date.toISOString().split('T')[0],
+        status: 'upcoming',
+      };
+      
+      const { data: mdData } = await supabase.from('matchdays').insert([matchdayData]).select().single();
+      if (mdData) {
+        this.matchdays = [...this.matchdays, mdData];
+        
+        // Insert matches for this matchday
+        for (let j = 0; j < md.matches.length; j++) {
+          const match = md.matches[j];
+          const court = (j % courts) + 1;
+          const slot = Math.floor(j / courts);
+          const startHour = 16 + slot * 2;
+          
+          const matchData = {
+            matchday_id: mdData.id,
+            team_a_id: match.team_a_id,
+            team_b_id: match.team_b_id,
+            court,
+            start_time: `${startHour}:00`,
+            end_time: `${startHour + 2}:00`,
+            status: 'upcoming',
+            winner_team_id: null,
+          };
+          
+          const { data: matchRecord } = await supabase.from('matches').insert([matchData]).select().single();
+          if (matchRecord) {
+            this.matches = [...this.matches, matchRecord];
+          }
+        }
+      }
     }
-
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'GENERATE_SCHEDULE', `Generated ${matches.length} matches`);
-    }
-  }
-
-  // Reset league
-  resetCompetitionData() {
-    // Hapus jadwal, hasil, statistik - pertahankan tim, pemain, user
-    this.saveMatchdays([]);
-    this.saveMatches([]);
-    this.savePairResults([]);
     
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'RESET_COMPETITION', 'Reset competition data');
-    }
+    this.notify();
   }
 
-  resetFullLeague() {
-    // Hapus semua data kecuali user super admin
-    const superAdmins = this.getUsers().filter(u => u.role === 'super_admin');
-    this.saveMatchdays([]);
-    this.saveMatches([]);
-    this.savePairResults([]);
-    this.saveTeams([]);
-    this.savePlayers([]);
-    this.savePairs([]);
-    this.saveUsers(superAdmins);
+  async resetCompetitionData() {
+    await supabase.from('pair_match_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matchdays').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+    this.matches = [];
+    this.matchdays = [];
+    this.pairResults = [];
+
+    this.notify();
+  }
+
+  async resetFullLeague() {
+    await supabase.from('pair_match_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('matchdays').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('pairs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('players').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('teams').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('admin_users').delete().neq('role', 'super_admin');
+
+    this.matches = [];
+    this.matchdays = [];
+    this.pairResults = [];
+    this.pairs = [];
+    this.players = [];
+    this.teams = [];
+    this.users = this.users.filter(u => u.role === 'super_admin');
+
+    this.notify();
+  }
+
+  getMVPs(): MVP[] { return this.mvps; }
+  async addMVP(mvp: Omit<MVP, 'id' | 'created_at'>) {
+    const { data, error } = await supabase.from('mvps').insert([mvp]).select().single();
+    if (!error && data) { this.mvps = [data, ...this.mvps]; this.notify(); return data; }
+    return null;
+  }
+  async updateMVP(mvp: MVP) {
+    const { error } = await supabase.from('mvps').update({
+      matchday_id: mvp.matchday_id, player_id: mvp.player_id, reason: mvp.reason,
+    }).eq('id', mvp.id);
+    if (!error) { this.mvps = this.mvps.map(m => m.id === mvp.id ? mvp : m); this.notify(); }
+  }
+  async deleteMVP(mvpId: string) {
+    const { error } = await supabase.from('mvps').delete().eq('id', mvpId);
+    if (!error) { this.mvps = this.mvps.filter(m => m.id !== mvpId); this.notify(); }
+  }
+
+  // MVP Matchday CRUD
+  getMVPsMatchday(): MVPMatchday[] { return this.mvpsMatchday; }
+  
+  getMVPsMatchdayByMatch(matchId: string): MVPMatchday[] {
+    return this.mvpsMatchday.filter(m => m.match_id === matchId);
+  }
+  
+  getMVPsMatchdayByMatchday(matchdayId: string): MVPMatchday[] {
+    return this.mvpsMatchday.filter(m => m.matchday_id === matchdayId);
+  }
+  
+  async addMVPMatchday(mvp: Omit<MVPMatchday, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase.from('mvps_matchday').insert([mvp]).select().single();
+    if (error) {
+      console.error('Error adding MVP Matchday:', error);
+      throw new Error('Gagal menambahkan MVP Matchday: ' + error.message);
+    }
+    if (data) {
+      this.mvpsMatchday = [data, ...this.mvpsMatchday];
+      this.notify();
+      return data;
+    }
+    return null;
+  }
+  
+  async updateMVPMatchday(mvp: MVPMatchday) {
+    const { error } = await supabase.from('mvps_matchday').update({
+      season: mvp.season,
+      matchday_id: mvp.matchday_id,
+      match_id: mvp.match_id,
+      party_number: mvp.party_number,
+      player_id: mvp.player_id,
+      notes: mvp.notes,
+      is_published: mvp.is_published,
+      updated_at: new Date().toISOString(),
+    }).eq('id', mvp.id);
     
-    const currentUser = this.getCurrentUser();
-    if (currentUser) {
-      this.addAuditLog(currentUser.id, currentUser.name, 'RESET_FULL', 'Full league reset');
+    if (error) {
+      console.error('Error updating MVP Matchday:', error);
+      throw new Error('Gagal mengupdate MVP Matchday: ' + error.message);
     }
+    
+    this.mvpsMatchday = this.mvpsMatchday.map(m => m.id === mvp.id ? { ...mvp, updated_at: new Date().toISOString() } : m);
+    this.notify();
+  }
+  
+  async deleteMVPMatchday(mvpId: string) {
+    const { error } = await supabase.from('mvps_matchday').delete().eq('id', mvpId);
+    if (error) {
+      console.error('Error deleting MVP Matchday:', error);
+      throw new Error('Gagal menghapus MVP Matchday: ' + error.message);
+    }
+    this.mvpsMatchday = this.mvpsMatchday.filter(m => m.id !== mvpId);
+    this.notify();
   }
 
-  // Subscription
+  // MVP Liga CRUD
+  getMVPsLiga(): MVPLiga[] { return this.mvpsLiga; }
+  
+  getMVPLigaBySeason(season: string): MVPLiga | null {
+    return this.mvpsLiga.find(m => m.season === season && m.is_published) || null;
+  }
+  
+  async addMVPLiga(mvp: Omit<MVPLiga, 'id' | 'created_at' | 'updated_at'>) {
+    // Check if there's already a published MVP Liga for this season
+    const existingPublished = this.mvpsLiga.find(m => m.season === mvp.season && m.is_published);
+    if (existingPublished && mvp.is_published) {
+      throw new Error('Sudah ada MVP Liga yang dipublikasikan untuk musim ini. Nonaktifkan yang lama terlebih dahulu.');
+    }
+    
+    const { data, error } = await supabase.from('mvps_liga').insert([mvp]).select().single();
+    if (error) {
+      console.error('Error adding MVP Liga:', error);
+      throw new Error('Gagal menambahkan MVP Liga: ' + error.message);
+    }
+    if (data) {
+      this.mvpsLiga = [data, ...this.mvpsLiga];
+      this.notify();
+      return data;
+    }
+    return null;
+  }
+  
+  async updateMVPLiga(mvp: MVPLiga) {
+    // Check if trying to publish when another is already published
+    if (mvp.is_published) {
+      const existingPublished = this.mvpsLiga.find(m => m.season === mvp.season && m.is_published && m.id !== mvp.id);
+      if (existingPublished) {
+        throw new Error('Sudah ada MVP Liga yang dipublikasikan untuk musim ini. Nonaktifkan yang lama terlebih dahulu.');
+      }
+    }
+    
+    const { error } = await supabase.from('mvps_liga').update({
+      season: mvp.season,
+      player_id: mvp.player_id,
+      notes: mvp.notes,
+      is_published: mvp.is_published,
+      updated_at: new Date().toISOString(),
+    }).eq('id', mvp.id);
+    
+    if (error) {
+      console.error('Error updating MVP Liga:', error);
+      throw new Error('Gagal mengupdate MVP Liga: ' + error.message);
+    }
+    
+    this.mvpsLiga = this.mvpsLiga.map(m => m.id === mvp.id ? { ...mvp, updated_at: new Date().toISOString() } : m);
+    this.notify();
+  }
+  
+  async deleteMVPLiga(mvpId: string) {
+    const { error } = await supabase.from('mvps_liga').delete().eq('id', mvpId);
+    if (error) {
+      console.error('Error deleting MVP Liga:', error);
+      throw new Error('Gagal menghapus MVP Liga: ' + error.message);
+    }
+    this.mvpsLiga = this.mvpsLiga.filter(m => m.id !== mvpId);
+    this.notify();
+  }
+
   subscribe(listener: () => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

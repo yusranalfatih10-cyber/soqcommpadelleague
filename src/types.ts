@@ -41,7 +41,28 @@ export interface Player {
   name: string;
   photo_url: string;
   is_active: boolean;
+  gender?: 'male' | 'female' | '';
+  position?: 'right' | 'left' | 'both' | '';
+  strengths?: string[]; // Keunggulan pemain
   created_at: string;
+}
+
+export interface PlayerStats {
+  totalMatches: number;
+  totalWins: number;
+  totalLosses: number;
+  winPercentage: number;
+  mvpMatchdayCount: number;
+  isMVPLiga: boolean;
+  matchHistory: Array<{
+    date: string;
+    matchday: string;
+    opponent: string;
+    partyNumber: number;
+    partner: string;
+    score: string;
+    result: 'win' | 'loss';
+  }>;
 }
 
 export interface Pair {
@@ -51,6 +72,39 @@ export interface Pair {
   player_2_id: string;
   pair_name: string;
   is_active: boolean;
+}
+
+export interface MVP {
+  id: string;
+  matchday_id: string;
+  player_id: string;
+  reason: string;
+  created_at: string;
+}
+
+// MVP Matchday - 4 slot per pertandingan (1 per partai)
+export interface MVPMatchday {
+  id: string;
+  season: string;
+  matchday_id: string;
+  match_id: string;
+  party_number: number; // 1-4
+  player_id: string;
+  notes: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// MVP Liga - 1 per musim
+export interface MVPLiga {
+  id: string;
+  season: string;
+  player_id: string;
+  notes: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Matchday {
@@ -80,29 +134,43 @@ export interface PairMatchResult {
   id: string;
   match_id: string;
   position: number;
-  team_a_pair_id: string;
-  team_b_pair_id: string;
+  team_a_pair_id: string | null;
+  team_b_pair_id: string | null;
   score_team_a: number;
   score_team_b: number;
   winner_team_id: string | null;
   status: 'pending' | 'completed';
 }
 
+// Match Lineup - Susunan pemain per partai
+export interface MatchLineup {
+  id: string;
+  match_id: string;
+  party_number: number; // 1-4
+  team_a_player1_id: string;
+  team_a_player2_id: string;
+  team_b_player1_id: string;
+  team_b_player2_id: string;
+  status: 'pending' | 'completed';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Standing {
   team_id: string;
   played: number;
-  total_points: number; // Total poin dari semua partai pasangan
+  total_points: number;
   pair_wins: number;
   pair_losses: number;
   pair_difference: number;
-  head_to_head_points?: Record<string, number>; // Untuk tie-break
+  head_to_head_points?: Record<string, number>;
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  password_hash: string; // Base64 encoded (untuk demo, bukan production)
+  password_hash: string;
   role: 'super_admin' | 'admin' | 'operator';
   is_active: boolean;
   created_at: string;
@@ -118,11 +186,5 @@ export interface AuditLog {
   timestamp: string;
 }
 
-export interface AdminUser {
-  id: string;
-  username: string;
-  role: 'admin';
-}
-
-export type Page = 'home' | 'standings' | 'schedule' | 'results' | 'teams' | 'statistics' | 'league-info' | 'match-detail' | 'team-detail';
+export type Page = 'home' | 'standings' | 'schedule' | 'results' | 'teams' | 'players' | 'mvp' | 'statistics' | 'league-info' | 'match-detail' | 'team-detail';
 export type AdminPage = 'dashboard' | 'settings' | 'teams' | 'players' | 'pairs' | 'schedule' | 'input-score' | 'results' | 'standings' | 'statistics' | 'system';
