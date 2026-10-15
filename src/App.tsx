@@ -46,6 +46,70 @@ const Logo: React.FC<{ size?: 'sm' | 'md' | 'lg'; logoUrl?: string }> = ({ size 
   );
 };
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          background: C.bg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+        }}>
+          <div style={{
+            background: C.surface,
+            borderRadius: 12,
+            padding: 24,
+            maxWidth: 500,
+            textAlign: 'center',
+            border: `1px solid ${C.border}`,
+          }}>
+            <h1 style={{ color: C.error, fontSize: 20, marginBottom: 12 }}>Terjadi Kesalahan</h1>
+            <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 16 }}>
+              {this.state.error?.message || 'Aplikasi mengalami error'}
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px',
+                background: C.primary,
+                color: '#fff',
+                borderRadius: 8,
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Muat Ulang Aplikasi
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 // Main App Component
 export default function App() {
   const [currentPage, setCurrentPage] = useState('home');
@@ -60,11 +124,13 @@ export default function App() {
   useEffect(() => {
     const initStore = async () => {
       try {
+        console.log('Initializing store...');
         await store.init();
+        console.log('Store initialized successfully');
         setLoading(false);
       } catch (err: any) {
         console.error('Error initializing store:', err);
-        setError(err.message || 'Gagal memuat data');
+        setError(err.message || 'Gagal memuat data dari database');
         setLoading(false);
       }
     };
@@ -86,25 +152,31 @@ export default function App() {
           background: C.surface,
           borderRadius: 12,
           padding: 24,
-          maxWidth: 400,
+          maxWidth: 500,
           textAlign: 'center',
-          border: `1px solid ${C.border}`,
+          border: `2px solid ${C.error}`,
         }}>
-          <h1 style={{ color: C.error, fontSize: 20, marginBottom: 12 }}>Error</h1>
-          <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 16 }}>{error}</p>
+          <h1 style={{ color: C.error, fontSize: 20, marginBottom: 12 }}>⚠️ Error Koneksi Database</h1>
+          <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+            {error}
+          </p>
+          <p style={{ color: C.textSecondary, fontSize: 13, marginBottom: 20 }}>
+            Pastikan Supabase sudah dikonfigurasi dengan benar dan tabel database sudah dibuat.
+          </p>
           <button 
             onClick={() => window.location.reload()}
             style={{
-              padding: '10px 20px',
+              padding: '12px 24px',
               background: C.primary,
               color: '#fff',
               borderRadius: 8,
               border: 'none',
               cursor: 'pointer',
               fontWeight: 600,
+              fontSize: 14,
             }}
           >
-            Reload
+            🔄 Coba Lagi
           </button>
         </div>
       </div>
@@ -156,6 +228,7 @@ export default function App() {
   ];
 
   return (
+    <ErrorBoundary>
     <div style={{ minHeight: '100vh', background: C.bg }}>
       {/* Header */}
       <header style={{
@@ -227,6 +300,7 @@ export default function App() {
         </div>
       </footer>
     </div>
+    </ErrorBoundary>
   );
 }
 

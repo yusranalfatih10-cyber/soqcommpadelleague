@@ -79,20 +79,25 @@ class Store {
   async init() {
     if (this.initialized) return;
     try {
-      const [leagueData, teamsData, playersData, pairsData, matchdaysData, matchesData, resultsData, usersData, mvpsData, mvpsMatchdayData, mvpsLigaData, lineupsData] = await Promise.all([
-        supabase.from('leagues').select('*').limit(1).single(),
-        supabase.from('teams').select('*').order('name'),
-        supabase.from('players').select('*').order('name'),
-        supabase.from('pairs').select('*'),
-        supabase.from('matchdays').select('*').order('matchday_number'),
-        supabase.from('matches').select('*'),
-        supabase.from('pair_match_results').select('*'),
-        supabase.from('admin_users').select('*'),
-        supabase.from('mvps').select('*'),
-        supabase.from('mvps_matchday').select('*').order('created_at', { ascending: false }),
-        supabase.from('mvps_liga').select('*').order('created_at', { ascending: false }),
-        supabase.from('match_lineups').select('*').order('match_id, party_number'),
-      ]);
+      console.log('🔵 Initializing store...');
+      
+      // Fetch data individually to handle missing tables gracefully
+      const leagueData = await supabase.from('leagues').select('*').limit(1).maybeSingle();
+      const teamsData = await supabase.from('teams').select('*').order('name');
+      const playersData = await supabase.from('players').select('*').order('name');
+      const pairsData = await supabase.from('pairs').select('*');
+      const matchdaysData = await supabase.from('matchdays').select('*').order('matchday_number');
+      const matchesData = await supabase.from('matches').select('*');
+      const resultsData = await supabase.from('pair_match_results').select('*');
+      const usersData = await supabase.from('admin_users').select('*');
+      const mvpsData = await supabase.from('mvps').select('*');
+      
+      // New tables - handle gracefully if they don't exist yet
+      const mvpsMatchdayData = await supabase.from('mvps_matchday').select('*').order('created_at', { ascending: false });
+      const mvpsLigaData = await supabase.from('mvps_liga').select('*').order('created_at', { ascending: false });
+      const lineupsData = await supabase.from('match_lineups').select('*').order('match_id, party_number');
+
+      console.log('✅ Data fetched successfully');
 
       if (leagueData.data) {
         this.league = { ...leagueData.data, settings: leagueData.data.settings || DEFAULT_SETTINGS };
@@ -118,6 +123,14 @@ class Store {
       this.mvpsMatchday = mvpsMatchdayData.data || [];
       this.mvpsLiga = mvpsLigaData.data || [];
       this.matchLineups = lineupsData.data || [];
+      
+      console.log('✅ Store initialized with data:', {
+        teams: this.teams.length,
+        players: this.players.length,
+        matches: this.matches.length,
+        mvpsMatchday: this.mvpsMatchday.length,
+        mvpsLiga: this.mvpsLiga.length,
+      });
 
       if (this.users.length === 0) {
         const { data } = await supabase.from('admin_users').insert([{
@@ -153,8 +166,15 @@ class Store {
       this.initialized = true;
       this.notify();
     } catch (error: any) {
-      console.error('Error initializing store:', error);
+      console.error('❌ Error initializing store:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+      
       // Fallback data jika Supabase gagal
+      console.log('⚠️ Using fallback data...');
       this.league = {
         id: 'fallback-league',
         name: 'SOQ.COMM PADEL LEAGUE',
@@ -176,6 +196,15 @@ class Store {
         { id: 'team-7', name: 'Pacific Padel Team', logo_url: '', captain: 'Gregory Flassy', description: 'Klub padel Pasifik', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         { id: 'team-8', name: 'Coral Reef Padel', logo_url: '', captain: 'Hans Kambuaya', description: 'Klub padel terumbu karang', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ];
+      this.players = [];
+      this.pairs = [];
+      this.matchdays = [];
+      this.matches = [];
+      this.pairResults = [];
+      this.mvps = [];
+      this.mvpsMatchday = [];
+      this.mvpsLiga = [];
+      this.matchLineups = [];
       this.users = [{
         id: 'user-1',
         name: 'Super Admin',
@@ -188,6 +217,7 @@ class Store {
       }];
       this.initialized = true;
       this.notify();
+      console.log('✅ Fallback data loaded successfully');
     }
   }
 
